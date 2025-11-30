@@ -1,21 +1,25 @@
-// 251RDB028 Reinis Delvers
-// 111RDB111 Ilze Programmētāja
+//251RDB028 Reinis Delvers
+//111RDB111 Aleksis Kaļetovs
+//111RDB111 Raimonds Polis
+//111RDB111 Izidors Vīķelis
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Scanner;
 
 
 public class Main {
-
-
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         String choiseStr;
         String sourceFile, resultFile, firstFile, secondFile;
 
+        probsInitializer(); //Initialize starting probabilities
+
         loop: while (true) {
 
+            System.out.println("Enter command: ");
             choiseStr = sc.next();
 
             switch (choiseStr) {
@@ -57,11 +61,165 @@ public class Main {
     }
 
     public static void comp(String sourceFile, String resultFile) {
-        // TODO: implement this method
+        //TODO: implement this method
+
+        //For testing purposes
+//       rangeEncoder(false, 0, 0, 'A');  //literal
+//       rangeEncoder(true, 3, 4, 0);     //match
+//       rangeEncoder(false, 0, 0, 'B');  //literal
+//       flush();
+    }
+
+    private static long subRangeStart = 0L;   //Interval start
+    private static long range = 0xFFFFFFFFL;    //set 32-bit max value
+    private static final int PROBABILITY_INITIALIZER = 1024; //Probability of 0 in scale of 0-2048
+
+    private static int matchProbability = PROBABILITY_INITIALIZER;  //1-bit tree
+    private static int[] literalProbability = new int[512];   //8-bit tree
+    private static int[] lengthProbability = new int[512];    //8-bit tree
+    private static int[] distanceProbability = new int[512];  //8-bit tree
+
+    //Initializing bit trees
+    public static void probsInitializer() {
+        Arrays.fill(literalProbability, PROBABILITY_INITIALIZER);   //Sets PROBABILITY_INITIALIZER as value to all array positions
+        Arrays.fill(lengthProbability, PROBABILITY_INITIALIZER);    //Sets PROBABILITY_INITIALIZER as value to all array positions
+        Arrays.fill(distanceProbability, PROBABILITY_INITIALIZER);  //Sets PROBABILITY_INITIALIZER as value to all array positions
+    }
+
+    //Main range encoder
+    public static void rangeEncoder(boolean isMatch, int distance, int length, int value) {
+        //Match ot literal bit encoding
+        encodeFlag(isMatch ? 1 : 0); //literal = 1, match = 1
+
+        //Encode depending on match or literal
+        if (isMatch) {
+            lengthEncoder(length);
+            distanceEncoder(distance);
+        } else {
+            literalEncoder(value);
+        }
+    }
+
+    //Match or literal flag encoder
+    public static void encodeFlag(int bit) {
+        int probability = matchProbability;
+        long subRange = (range >>> 11) * probability;
+        if (bit == 0) {
+            range = subRange;
+            matchProbability += (2048 - probability) >>> 5;
+        } else {
+            subRangeStart += subRange;
+            range -= subRange;
+            matchProbability -= probability>>> 5;
+        }
+
+        //Return stable bytes
+        while ((range & 0xFF000000L) == 0) {
+            output((byte)(subRangeStart >> 24));
+            range <<= 8;
+            subRangeStart <<= 8;
+        }
+    }
+
+    //Literal value encoder
+    public static void literalEncoder(int value) {
+        int bitTreeIndex = 1; //bit tree position index root start is 1
+        for (int i = 7; i >= 0; i--) {
+            int bit = (value >>> i) & 1;
+            int probability = literalProbability[bitTreeIndex];
+            long subRange = (range >>> 11) * probability;
+
+            if (bit == 0) {
+                range = subRange;
+                literalProbability[bitTreeIndex] += (2048 - probability) >>> 5;
+                bitTreeIndex <<= 1;   //go left int bit tree
+            } else {
+                subRangeStart += subRange;
+                range -= subRange;
+                literalProbability[bitTreeIndex] -= probability >>> 5;
+                bitTreeIndex = (bitTreeIndex << 1) | 1; //go right int bit tree
+            }
+
+            //Return stable bytes
+            while ((range & 0xFF000000L) == 0) {
+                output((byte) (subRangeStart >> 24));
+                range <<= 8;
+                subRangeStart <<= 8;
+            }
+        }
+    }
+
+    //Match length value encoder
+    public static void lengthEncoder(int length) {
+        int len = length - 2;   //min match length = 2 subRangeStarter numbers
+        int bitTreeIndex = 1;   //bit tree position index root start is 1
+        for (int i = 7; i >= 0; i--) {
+            int bit = (len >>> i) & 1;
+            int probability= lengthProbability[bitTreeIndex];
+            long subRange = (range >>> 11) * probability;
+
+            if (bit == 0) {
+                range = subRange;
+                lengthProbability[bitTreeIndex] += (2048 - probability) >>> 5;
+                bitTreeIndex <<= 1;
+            } else {
+                subRangeStart += subRange;
+                range -= subRange;
+                lengthProbability[bitTreeIndex] -= probability >>> 5;
+                bitTreeIndex = (bitTreeIndex << 1) | 1;
+            }
+
+            //Return stable bytes
+            while ((range & 0xFF000000L) == 0) {
+                output((byte) (subRangeStart >> 24));
+                range <<= 8;
+                subRangeStart <<= 8;
+            }
+        }
+    }
+
+    //Match distance value encoder
+    public static void distanceEncoder(int distance) {
+        int bitTreeIndex = 1;    //bit tree position index root start is 1
+        for (int i = 7; i >= 0; i--) {
+            int bit = (distance >>> i) & 1;
+            int probability= distanceProbability[bitTreeIndex];
+            long subRange = (range >>> 11) * probability;
+
+            if (bit == 0) {
+                range = subRange;
+                distanceProbability[bitTreeIndex] += (2048 - probability) >>> 5;
+                bitTreeIndex <<= 1;
+            } else {
+                subRangeStart += subRange;
+                range -= subRange;
+                distanceProbability[bitTreeIndex] -= probability >>> 5;
+                bitTreeIndex = (bitTreeIndex << 1) | 1;
+            }
+
+            //Return stable bytes
+            while ((range & 0xFF000000L) == 0) {
+                output((byte) (subRangeStart >> 24));
+                range <<= 8;
+                subRangeStart <<= 8;
+            }
+        }
+    }
+
+    //After encoding everything taking the last bit value
+    public static void flush() {
+        for (int i = 0; i < 4; i++) {
+            output((byte)(subRangeStart >> 24));
+            subRangeStart <<= 8;
+        }
+    }
+
+    public static void output(byte compressedByte) {
+        System.out.println(compressedByte);
     }
 
     public static void decomp(String sourceFile, String resultFile) {
-        // TODO: implement this method
+        //TODO: implement this method
     }
 
     public static void size(String sourceFile) {
@@ -111,9 +269,11 @@ public class Main {
     }
 
     public static void about() {
-        // TODO insert information about authors
+        //TODO insert information about authors
         System.out.println("251RDB028 Reinis Delvers");
-        System.out.println("111RDB111 Ilze Programmētāja");
+        System.out.println("111RDB111 Aleksis Kaļetovs");
+        System.out.println("111RDB111 Raimonds Polis");
+        System.out.println("111RDB111 Izidors Vīķelis");
+
     }
 }
-
