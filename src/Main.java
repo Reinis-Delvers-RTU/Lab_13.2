@@ -5,6 +5,7 @@
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Scanner;
 
@@ -15,7 +16,7 @@ public class Main {
         String choiseStr;
         String sourceFile, resultFile, firstFile, secondFile;
 
-        probsInitializer(); //Initialize starting probabilities
+        encoderReset(); //Initialize starting probabilities
 
         loop: while (true) {
 
@@ -64,10 +65,11 @@ public class Main {
         //TODO: implement this method
 
         //For testing purposes
-//       rangeEncoder(false, 0, 0, 'A');  //literal
-//       rangeEncoder(true, 3, 4, 0);     //match
-//       rangeEncoder(false, 0, 0, 'B');  //literal
-//       flush();
+        rangeEncoder(false, 0, 0, 'A');  //literal
+        rangeEncoder(true, 3, 4, 0);     //match
+        rangeEncoder(false, 0, 0, 'B');  //literal
+        flush();
+        System.out.println(outCompressedBytes);
     }
 
     private static long subRangeStart = 0L;   //Interval start
@@ -75,12 +77,18 @@ public class Main {
     private static final int PROBABILITY_INITIALIZER = 1024; //Probability of 0 in scale of 0-2048
 
     private static int matchProbability = PROBABILITY_INITIALIZER;  //1-bit tree
-    private static int[] literalProbability = new int[512];   //8-bit tree
-    private static int[] lengthProbability = new int[512];    //8-bit tree
-    private static int[] distanceProbability = new int[512];  //8-bit tree
+    private static int[] literalProbability = new int[256];   //8-bit tree
+    private static int[] lengthProbability = new int[256];    //8-bit tree
+    private static int[] distanceProbability = new int[256];  //8-bit tree
 
-    //Initializing bit trees
-    public static void probsInitializer() {
+    private static ArrayList<Byte> outCompressedBytes = new ArrayList<>();
+
+    //Resets global values for encoder
+    public static void encoderReset() {
+        outCompressedBytes.clear();
+        subRangeStart = 0L;
+        range = 0xFFFFFFFFL;
+        matchProbability = PROBABILITY_INITIALIZER;
         Arrays.fill(literalProbability, PROBABILITY_INITIALIZER);   //Sets PROBABILITY_INITIALIZER as value to all array positions
         Arrays.fill(lengthProbability, PROBABILITY_INITIALIZER);    //Sets PROBABILITY_INITIALIZER as value to all array positions
         Arrays.fill(distanceProbability, PROBABILITY_INITIALIZER);  //Sets PROBABILITY_INITIALIZER as value to all array positions
@@ -89,7 +97,7 @@ public class Main {
     //Main range encoder
     public static void rangeEncoder(boolean isMatch, int distance, int length, int value) {
         //Match ot literal bit encoding
-        encodeFlag(isMatch ? 1 : 0); //literal = 1, match = 1
+        encodeFlag(isMatch ? 1 : 0); //literal = 0, match = 1
 
         //Encode depending on match or literal
         if (isMatch) {
@@ -110,12 +118,12 @@ public class Main {
         } else {
             subRangeStart += subRange;
             range -= subRange;
-            matchProbability -= probability>>> 5;
+            matchProbability -= probability >>> 5;
         }
 
         //Return stable bytes
-        while ((range & 0xFF000000L) == 0) {
-            output((byte)(subRangeStart >> 24));
+        while ((range < 0x01000000)) {
+            outCompressedBytes.add((byte)(subRangeStart >> 24));
             range <<= 8;
             subRangeStart <<= 8;
         }
@@ -141,8 +149,8 @@ public class Main {
             }
 
             //Return stable bytes
-            while ((range & 0xFF000000L) == 0) {
-                output((byte) (subRangeStart >> 24));
+            while ((range < 0x01000000)) {
+                outCompressedBytes.add((byte)(subRangeStart >> 24));
                 range <<= 8;
                 subRangeStart <<= 8;
             }
@@ -170,8 +178,8 @@ public class Main {
             }
 
             //Return stable bytes
-            while ((range & 0xFF000000L) == 0) {
-                output((byte) (subRangeStart >> 24));
+            while ((range < 0x01000000)) {
+                outCompressedBytes.add((byte)(subRangeStart >> 24));
                 range <<= 8;
                 subRangeStart <<= 8;
             }
@@ -198,8 +206,8 @@ public class Main {
             }
 
             //Return stable bytes
-            while ((range & 0xFF000000L) == 0) {
-                output((byte) (subRangeStart >> 24));
+            while ((range < 0x01000000)) {
+                outCompressedBytes.add((byte)(subRangeStart >> 24));
                 range <<= 8;
                 subRangeStart <<= 8;
             }
@@ -209,13 +217,9 @@ public class Main {
     //After encoding everything taking the last bit value
     public static void flush() {
         for (int i = 0; i < 4; i++) {
-            output((byte)(subRangeStart >> 24));
+            outCompressedBytes.add((byte)(subRangeStart >> 24));
             subRangeStart <<= 8;
         }
-    }
-
-    public static void output(byte compressedByte) {
-        System.out.println(compressedByte);
     }
 
     public static void decomp(String sourceFile, String resultFile) {
