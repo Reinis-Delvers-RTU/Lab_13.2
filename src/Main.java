@@ -223,8 +223,146 @@ public class Main {
     }
 
     public static void decomp(String sourceFile, String resultFile) {
-        //TODO: implement this method
+    try {
+        // read compressed data
+        byte[] input = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(sourceFile));
+
+        // output buffer
+        ArrayList<Byte> out = new ArrayList<>();
+
+        // reset the coder state
+        encoderReset();
+
+        class Decoder {
+            int inPos = 0;
+            long code = 0;
+
+            Decoder() {
+                // load first 4 bytes into code
+                for (int i = 0; i < 4; i++) {
+                    code = (code << 8) | (input[inPos++] & 0xFF);
+                }
+            }
+
+            void normalize() {
+                while (range < 0x01000000) {
+                    if (inPos < input.length) {
+                        code = ((code << 8) | (input[inPos++] & 0xFF)) & 0xFFFFFFFFL;
+                    } else {
+                        code = (code << 8) & 0xFFFFFFFFL;
+                    }
+                    range <<= 8;
+                    subRangeStart <<= 8;
+                }
+            }
+
+            int decodeFlag() {
+                int p = matchProbability;
+                long bound = (range >>> 11) * p;
+                int bit;
+
+                if ((code - subRangeStart) < bound) {
+                    range = bound;
+                    matchProbability += (2048 - p) >>> 5;
+                    bit = 0;
+                } else {
+                    subRangeStart += bound;
+                    range -= bound;
+                    matchProbability -= p >>> 5;
+                    bit = 1;
+                }
+
+                normalize();
+                return bit;
+            }
+
+            int decodeBit(int[] prob, int idx) {
+                int p = prob[idx];
+                long bound = (range >>> 11) * p;
+                int bit;
+
+                if ((code - subRangeStart) < bound) {
+                    range = bound;
+                    prob[idx] += (2048 - p) >>> 5;
+                    bit = 0;
+                } else {
+                    subRangeStart += bound;
+                    range -= bound;
+                    prob[idx] -= p >>> 5;
+                    bit = 1;
+                }
+
+                normalize();
+                return bit;
+            }
+
+            int decodeLiteral() {
+                int idx = 1;
+                int value = 0;
+                for (int i = 7; i >= 0; i--) {
+                    int b = decodeBit(literalProbability, idx);
+                    value |= b << i;
+                    idx = (idx << 1) | b;
+                }
+                return value;
+            }
+            //mind = controlled
+            int decodeLength() {
+                int idx = 1;
+                int value = 0;
+                for (int i = 7; i >= 0; i--) {
+                    int b = decodeBit(lengthProbability, idx);
+                    value |= b << i;
+                    idx = (idx << 1) | b;
+                }
+                return value + 2;
+            }
+
+            int decodeDistance() {
+                int idx = 1;
+                int value = 0;
+                for (int i = 7; i >= 0; i--) {
+                    int b = decodeBit(distanceProbability, idx);
+                    value |= b << i;
+                    idx = (idx << 1) | b;
+                }
+                return value;
+            }
+        }
+
+        // create decoder instance
+        Decoder d = new Decoder();
+
+        // --- MAIN LOOP ---
+        while (d.inPos < input.length) {
+            int isMatch = d.decodeFlag();
+
+            if (isMatch == 0) {
+                int lit = d.decodeLiteral();
+                out.add((byte) lit);
+            } else {
+                int len = d.decodeLength();
+                int dist = d.decodeDistance();
+
+                for (int i = 0; i < len; i++) {
+                    byte b = out.get(out.size() - dist);
+                    out.add(b);
+                }
+            }
+        }
+
+        // write decompressed file
+        byte[] outputBytes = new byte[out.size()];
+        for (int i = 0; i < out.size(); i++) outputBytes[i] = out.get(i);
+
+        java.nio.file.Files.write(java.nio.file.Paths.get(resultFile), outputBytes);
+        System.out.println("Decompression complete.");
+
+    } catch (Exception ex) {
+        System.out.println("Decompression error: " + ex.getMessage());
     }
+}
+
 
     public static void size(String sourceFile) {
         try {
