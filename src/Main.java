@@ -1,9 +1,9 @@
 //251RDB028 Reinis Delvers
 //111RDB111 Aleksis Kaļetovs
 //111RDB111 Raimonds Polis
-//111RDB111 Izidors Vīķelis
 
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,8 +15,6 @@ public class Main {
         Scanner sc = new Scanner(System.in);
         String choiseStr;
         String sourceFile, resultFile, firstFile, secondFile;
-
-        encoderReset(); //Initialize starting probabilities
 
         loop: while (true) {
 
@@ -63,13 +61,24 @@ public class Main {
 
     public static void comp(String sourceFile, String resultFile) {
         //TODO: implement this method
-
         //For testing purposes
+        encoderReset();
+
         rangeEncoder(false, 0, 0, 'A');  //literal
-        rangeEncoder(true, 3, 4, 0);     //match
+        rangeEncoder(false, 0, 0, 'B');  //literal
+        rangeEncoder(false, 0, 0, 'C');  //literal
+        rangeEncoder(true, 3, 3, 0);     //match
         rangeEncoder(false, 0, 0, 'B');  //literal
         flush();
-        System.out.println(outCompressedBytes);
+
+        try (FileOutputStream out = new FileOutputStream(resultFile)) {
+            for (int i = 0; i < outCompressedBytes.size(); i++) {
+                out.write(outCompressedBytes.get(i));  // get Byte from ArrayList
+            }
+        }
+        catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
     }
 
     private static long subRangeStart = 0L;   //Interval start
@@ -77,9 +86,9 @@ public class Main {
     private static final int PROBABILITY_INITIALIZER = 1024; //Probability of 0 in scale of 0-2048
 
     private static int matchProbability = PROBABILITY_INITIALIZER;  //1-bit tree
-    private static int[] literalProbability = new int[256];   //8-bit tree
-    private static int[] lengthProbability = new int[256];    //8-bit tree
-    private static int[] distanceProbability = new int[256];  //8-bit tree
+    private static int[] literalProbability = new int[512];   //8-bit tree
+    private static int[] lengthProbability = new int[512];    //8-bit tree
+    private static int[] distanceProbability = new int[512];  //8-bit tree
 
     private static ArrayList<Byte> outCompressedBytes = new ArrayList<>();
 
@@ -147,13 +156,7 @@ public class Main {
                 literalProbability[bitTreeIndex] -= probability >>> 5;
                 bitTreeIndex = (bitTreeIndex << 1) | 1; //go right int bit tree
             }
-
-            //Return stable bytes
-            while ((range < 0x01000000)) {
-                outCompressedBytes.add((byte)(subRangeStart >> 24));
-                range <<= 8;
-                subRangeStart <<= 8;
-            }
+            normalizeEncoder();
         }
     }
 
@@ -176,13 +179,7 @@ public class Main {
                 lengthProbability[bitTreeIndex] -= probability >>> 5;
                 bitTreeIndex = (bitTreeIndex << 1) | 1;
             }
-
-            //Return stable bytes
-            while ((range < 0x01000000)) {
-                outCompressedBytes.add((byte)(subRangeStart >> 24));
-                range <<= 8;
-                subRangeStart <<= 8;
-            }
+            normalizeEncoder();
         }
     }
 
@@ -204,13 +201,16 @@ public class Main {
                 distanceProbability[bitTreeIndex] -= probability >>> 5;
                 bitTreeIndex = (bitTreeIndex << 1) | 1;
             }
-
-            //Return stable bytes
-            while ((range < 0x01000000)) {
-                outCompressedBytes.add((byte)(subRangeStart >> 24));
-                range <<= 8;
-                subRangeStart <<= 8;
-            }
+            normalizeEncoder();
+        }
+    }
+    
+    public static void normalizeEncoder() {
+        //Return stable bytes
+        while ((range < 0x01000000)) {
+            outCompressedBytes.add((byte)(subRangeStart >> 24));
+            range <<= 8;
+            subRangeStart <<= 8;
         }
     }
 
@@ -223,8 +223,146 @@ public class Main {
     }
 
     public static void decomp(String sourceFile, String resultFile) {
-        //TODO: implement this method
+        try {
+            // read compressed data
+            byte[] input = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(sourceFile));
+
+            // output buffer
+            ArrayList<Byte> out = new ArrayList<>();
+
+            // reset the coder state
+            encoderReset();
+
+            class Decoder {
+                int inPos = 0;
+                long code = 0;
+
+                Decoder() {
+                    // load first 4 bytes into code
+                    for (int i = 0; i < 4; i++) {
+                        code = (code << 8) | (input[inPos++] & 0xFF);
+                    }
+                }
+
+                void normalize() {
+                    while (range < 0x01000000) {
+                        if (inPos < input.length) {
+                            code = ((code << 8) | (input[inPos++] & 0xFF)) & 0xFFFFFFFFL;
+                        } else {
+                            code = (code << 8) & 0xFFFFFFFFL;
+                        }
+                        range <<= 8;
+                        subRangeStart <<= 8;
+                    }
+                }
+
+                int decodeFlag() {
+                    int p = matchProbability;
+                    long bound = (range >>> 11) * p;
+                    int bit;
+
+                    if ((code - subRangeStart) < bound) {
+                        range = bound;
+                        matchProbability += (2048 - p) >>> 5;
+                        bit = 0;
+                    } else {
+                        subRangeStart += bound;
+                        range -= bound;
+                        matchProbability -= p >>> 5;
+                        bit = 1;
+                    }
+
+                    normalize();
+                    return bit;
+                }
+
+                int decodeBit(int[] prob, int idx) {
+                    int p = prob[idx];
+                    long bound = (range >>> 11) * p;
+                    int bit;
+
+                    if ((code - subRangeStart) < bound) {
+                        range = bound;
+                        prob[idx] += (2048 - p) >>> 5;
+                        bit = 0;
+                    } else {
+                        subRangeStart += bound;
+                        range -= bound;
+                        prob[idx] -= p >>> 5;
+                        bit = 1;
+                    }
+
+                    normalize();
+                    return bit;
+                }
+
+                int decodeLiteral() {
+                    int idx = 1;
+                    int value = 0;
+                    for (int i = 7; i >= 0; i--) {
+                        int b = decodeBit(literalProbability, idx);
+                        value |= b << i;
+                        idx = (idx << 1) | b;
+                    }
+                    return value;
+                }
+                //mind = controlled
+                int decodeLength() {
+                    int idx = 1;
+                    int value = 0;
+                    for (int i = 7; i >= 0; i--) {
+                        int b = decodeBit(lengthProbability, idx);
+                        value |= b << i;
+                        idx = (idx << 1) | b;
+                    }
+                    return value + 2;
+                }
+
+                int decodeDistance() {
+                    int idx = 1;
+                    int value = 0;
+                    for (int i = 7; i >= 0; i--) {
+                        int b = decodeBit(distanceProbability, idx);
+                        value |= b << i;
+                        idx = (idx << 1) | b;
+                    }
+                    return value;
+                }
+            }
+
+            // create decoder instance
+            Decoder d = new Decoder();
+
+            // --- MAIN LOOP ---
+            while (d.inPos < input.length) {
+                int isMatch = d.decodeFlag();
+
+                if (isMatch == 0) {
+                    int lit = d.decodeLiteral();
+                    out.add((byte) lit);
+                } else {
+                    int len = d.decodeLength();
+                    int dist = d.decodeDistance();
+
+                    for (int i = 0; i < len; i++) {
+                        byte b = out.get(out.size() - dist);
+                        out.add(b);
+                    }
+                }
+            }
+
+            // write decompressed file
+            byte[] outputBytes = new byte[out.size()];
+            for (int i = 0; i < out.size(); i++) outputBytes[i] = out.get(i);
+
+            java.nio.file.Files.write(java.nio.file.Paths.get(resultFile), outputBytes);
+            System.out.println("Decompression complete.");
+
+        } catch (Exception ex) {
+            System.out.println("Decompression error: " + ex.getMessage());
+        }
     }
+
 
     public static void size(String sourceFile) {
         try {
@@ -277,7 +415,6 @@ public class Main {
         System.out.println("251RDB028 Reinis Delvers");
         System.out.println("111RDB111 Aleksis Kaļetovs");
         System.out.println("111RDB111 Raimonds Polis");
-        System.out.println("111RDB111 Izidors Vīķelis");
 
     }
 }
