@@ -3,12 +3,13 @@
 //111RDB111 Raimonds Polis
 //111RDB111 Izidors Vīķelis
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Scanner;
-
 
 public class Main {
     public static void main(String[] args) {
@@ -61,16 +62,153 @@ public class Main {
         sc.close();
     }
 
-    public static void comp(String sourceFile, String resultFile) {
-        //TODO: implement this method
+    private static final int DICT_SIZE = 1024;
 
-        //For testing purposes
-        rangeEncoder(false, 0, 0, 'A');  //literal
-        rangeEncoder(true, 3, 4, 0);     //match
-        rangeEncoder(false, 0, 0, 'B');  //literal
-        flush();
-        System.out.println(outCompressedBytes);
+    private static final int MAX_DISTANCE = 255;
+    private static final int MAX_MATCH_LEN = 255;
+    // Encoder dictionary
+    private static byte[] dictionary = new byte[DICT_SIZE];
+    private static int dictPos = 0;
+    private static int dictFill = 0;
+
+    private static void dictPut(byte b) {
+        dictionary[dictPos] = b;
+        dictPos = (dictPos + 1) % DICT_SIZE;
+        if (dictFill < DICT_SIZE) {
+            dictFill++;
+        }
     }
+
+    private static void resetDictionary() {
+        Arrays.fill(dictionary, (byte) 0);
+        dictPos = 0;
+        dictFill = 0;
+    }
+
+    // Reads the entire source file into a byte array.
+    private static byte[] readAllBytes(String sourceFile) {
+        try (FileInputStream in = new FileInputStream(sourceFile);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+
+            byte[] buf = new byte[4096];
+            int k;
+            while ((k = in.read(buf)) != -1) {
+                baos.write(buf, 0, k);
+            }
+            return baos.toByteArray();
+        } catch (IOException ex) {
+            System.out.println("Error reading source file: " + ex.getMessage());
+            return null;
+        }
+    }
+
+    // Walks through all input bytes and encodes them as either match or literal
+    private static void encodeInput(byte[] input) {
+        int n = input.length;
+        int i = 0;
+
+        while (i < n) {
+            if (i == n - 1) {
+                encodeLiteral(input[i]);
+                i++;
+                continue;
+            }
+
+            int[] match = findBestMatch(input, i);
+            int bestLen = match[0];
+            int bestDist = match[1];
+
+            if (bestLen >= 2) {
+                encodeMatch(input, i, bestLen, bestDist);
+                i += bestLen;
+            } else {
+                encodeLiteral(input[i]);
+                i++;
+            }
+        }
+    }
+
+    // Tries to find the best (longest) match starting at position 'pos' in 'input'.
+    private static int[] findBestMatch(byte[] input, int pos) {
+        int n = input.length;
+        int bestLen = 0;
+        int bestDist = 0;
+
+        if (pos + 1 >= n) {
+            return new int[]{0, 0};
+        }
+
+        byte b0 = input[pos];
+        byte b1 = input[pos + 1];
+
+        int maxBack = Math.min(MAX_DISTANCE, pos);
+
+        for (int dist = 1; dist <= maxBack; dist++) {
+            int j = pos - dist;
+            if (j < 0 || j + 1 >= n) continue;
+
+            if (input[j] != b0 || input[j + 1] != b1) continue;
+
+            int len = 2;
+            while (len < MAX_MATCH_LEN &&
+                pos + len < n &&
+                j + len < n &&
+                input[pos + len] == input[j + len]) {
+                len++;
+            }
+
+            if (len > bestLen) {
+                bestLen = len;
+                bestDist = dist;
+                if (bestLen == MAX_MATCH_LEN) break;
+            }
+        }
+
+        return new int[]{bestLen, bestDist};
+    }
+
+    // Encodes a single byte as a literal using rangeEncoder.
+    private static void encodeLiteral(byte b) {
+        rangeEncoder(false, 0, 0, b & 0xFF);
+        dictPut(b);
+    }
+
+    // Encodes a match given by (distance, length), starting at 'pos' in 'input'. Calls rangeEncoder as a match and then pushes every matched byte into the dictionary so that future matches can refer to it.
+    private static void encodeMatch(byte[] input, int pos, int length, int distance) {
+        rangeEncoder(true, distance, length, 0);
+        for (int k = 0; k < length; k++) {
+            dictPut(input[pos + k]);
+        }
+    }
+
+    // Writes all bytes collected in outCompressedBytes to the given file.
+    private static void writeCompressed(String resultFile) {
+        try (FileOutputStream out = new FileOutputStream(resultFile)) {
+            for (byte b : outCompressedBytes) {
+                out.write(b);
+            }
+        } catch (IOException ex) {
+            System.out.println("Error writing compressed file: " + ex.getMessage());
+        }
+    }
+
+    // 1) Resets range encoder & dictionary,
+    // 2) Reads all input bytes from sourceFile,
+    // 3) Encodes them (matches + literals),
+    // 4) Flushes range encoder and writes result to resultFile.
+    public static void comp(String sourceFile, String resultFile) {
+        encoderReset();
+        resetDictionary();
+
+        byte[] input = readAllBytes(sourceFile);
+        if (input == null) return;
+
+        encodeInput(input);
+        flush();
+        writeCompressed(resultFile);
+    }
+
+
 
     private static long subRangeStart = 0L;   //Interval start
     private static long range = 0xFFFFFFFFL;    //set 32-bit max value
