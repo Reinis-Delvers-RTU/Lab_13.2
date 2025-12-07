@@ -11,6 +11,9 @@ import java.util.Arrays;
 import java.util.Scanner;
 
 public class Main {
+    //
+    //MAIN
+    //
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         String choiseStr;
@@ -48,6 +51,10 @@ public class Main {
                     secondFile = sc.next();
                     System.out.println(equal(firstFile, secondFile));
                     break;
+                case "test":
+                    comp("test.txt", "t.txt");
+                    decomp("t.txt", "tt.txt");
+                    break;
                 case "about":
                     about();
                     break;
@@ -59,6 +66,9 @@ public class Main {
         sc.close();
     }
 
+    //
+    //COMP MATCH FINDER
+    //
     private static final int DICT_SIZE = 1024;
 
     private static final int MAX_DISTANCE = 255;
@@ -189,11 +199,11 @@ public class Main {
         }
     }
 
-    // 1) Resets range encoder & dictionary,
-    // 2) Reads all input bytes from sourceFile,
-    // 3) Encodes them (matches + literals),
-    // 4) Flushes range encoder and writes result to resultFile.
+    //
+    //COMP
+    //
     public static void comp(String sourceFile, String resultFile) {
+        System.out.print("Compresion started");
         encoderReset();
         resetDictionary();
 
@@ -203,10 +213,13 @@ public class Main {
         encodeInput(input);
         flush();
         writeCompressed(resultFile);
+        System.out.print("Compresion complete");
     }
 
 
-
+    //
+    //COMP RANGE ENCODER
+    //
     private static long subRangeStart = 0L;   //Interval start
     private static long range = 0xFFFFFFFFL;    //set 32-bit max value
     private static final int PROBABILITY_INITIALIZER = 1024; //Probability of 0 in scale of 0-2048
@@ -330,7 +343,7 @@ public class Main {
             normalizeEncoder();
         }
     }
-    
+
     public static void normalizeEncoder() {
         //Return stable bytes
         while ((range < 0x01000000)) {
@@ -348,6 +361,9 @@ public class Main {
         }
     }
 
+    //
+    //DECOMP RANGE DECODER
+    //
     public static void decomp(String sourceFile, String resultFile) {
         try {
             // read compressed data
