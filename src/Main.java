@@ -176,12 +176,14 @@ public class Main {
 
     // Encodes a single byte as a literal using rangeEncoder.
     private static void encodeLiteral(byte b) {
+        totalSymbols++;
         rangeEncoder(false, 0, 0, b & 0xFF);
         dictPut(b);
     }
 
     // Encodes a match given by (distance, length), starting at 'pos' in 'input'. Calls rangeEncoder as a match and then pushes every matched byte into the dictionary so that future matches can refer to it.
     private static void encodeMatch(byte[] input, int pos, int length, int distance) {
+        totalSymbols++;
         rangeEncoder(true, distance, length, 0);
         for (int k = 0; k < length; k++) {
             dictPut(input[pos + k]);
@@ -191,6 +193,11 @@ public class Main {
     // Writes all bytes collected in outCompressedBytes to the given file.
     private static void writeCompressed(String resultFile) {
         try (FileOutputStream out = new FileOutputStream(resultFile)) {
+            out.write((totalSymbols >>> 24) & 0xFF);
+            out.write((totalSymbols >>> 16) & 0xFF);
+            out.write((totalSymbols >>> 8) & 0xFF);
+            out.write(totalSymbols & 0xFF);
+
             for (byte b : outCompressedBytes) {
                 out.write(b);
             }
@@ -202,11 +209,13 @@ public class Main {
     //
     //COMP
     //
+    private static int totalSymbols = 0;
     public static void comp(String sourceFile, String resultFile) {
         System.out.print("Compresion started");
-        encoderReset();
+        resetEncoder();
         resetDictionary();
 
+        totalSymbols = 0;
         byte[] input = readAllBytes(sourceFile);
         if (input == null) return;
 
@@ -232,7 +241,7 @@ public class Main {
     private static ArrayList<Byte> outCompressedBytes = new ArrayList<>();
 
     //Resets global values for encoder
-    public static void encoderReset() {
+    public static void resetEncoder() {
         outCompressedBytes.clear();
         subRangeStart = 0L;
         range = 0xFFFFFFFFL;
@@ -245,7 +254,7 @@ public class Main {
     //Main range encoder
     public static void rangeEncoder(boolean isMatch, int distance, int length, int value) {
         //Match ot literal bit encoding
-        encodeFlag(isMatch ? 1 : 0); //literal = 0, match = 1
+        flagEncoder(isMatch ? 1 : 0); //literal = 0, match = 1
 
         //Encode depending on match or literal
         if (isMatch) {
@@ -257,7 +266,7 @@ public class Main {
     }
 
     //Match or literal flag encoder
-    public static void encodeFlag(int bit) {
+    public static void flagEncoder(int bit) {
         int probability = matchProbability;
         long subRange = (range >>> 11) * probability;
         if (bit == 0) {
@@ -324,9 +333,10 @@ public class Main {
 
     //Match distance value encoder
     public static void distanceEncoder(int distance) {
-        int bitTreeIndex = 1;    //bit tree position index root start is 1
+        int dist = distance - 1;
+        int bitTreeIndex = 1;    // bit tree position index root start is 1
         for (int i = 7; i >= 0; i--) {
-            int bit = (distance >>> i) & 1;
+            int bit = (dist >>> i) & 1;
             int probability= distanceProbability[bitTreeIndex];
             long subRange = (range >>> 11) * probability;
 
@@ -369,14 +379,24 @@ public class Main {
             // read compressed data
             byte[] input = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(sourceFile));
 
-            // output buffer
-            ArrayList<Byte> out = new ArrayList<>();
+            // reset encoder state (probabilities and range variables)
+            resetEncoder();
+            resetDictionary();
 
-            // reset the coder state
-            encoderReset();
+            if (input == null || input.length < 4) {
+                System.out.println("Compressed file too short or missing header.");
+                return;
+            }
 
+            int symbolCount = ((input[0] & 0xFF) << 24) |
+                    ((input[1] & 0xFF) << 16) |
+                    ((input[2] & 0xFF) << 8) |
+                    (input[3] & 0xFF);
+            int inPosStart = 4;
+
+            // Decoder class for range decoding
             class Decoder {
-                int inPos = 0;
+                int inPos = inPosStart;
                 long code = 0;
 
                 Decoder() {
@@ -468,7 +488,7 @@ public class Main {
                         value |= b << i;
                         idx = (idx << 1) | b;
                     }
-                    return value;
+                    return value + 1;
                 }
             }
 
@@ -476,19 +496,28 @@ public class Main {
             Decoder d = new Decoder();
 
             // --- MAIN LOOP ---
-            while (d.inPos < input.length) {
+            ArrayList<Byte> out = new ArrayList<>();
+            for (int s = 0; s < symbolCount; s++) {
                 int isMatch = d.decodeFlag();
 
                 if (isMatch == 0) {
                     int lit = d.decodeLiteral();
-                    out.add((byte) lit);
+                    byte b = (byte) lit;
+                    out.add(b);
+                    dictPut(b); // push literal to global dictionary
                 } else {
                     int len = d.decodeLength();
                     int dist = d.decodeDistance();
 
+                    if (dist <= 0 || dist > dictFill) {
+                        throw new RuntimeException("Invalid distance: " + dist + " at position " + out.size());
+                    }
+
                     for (int i = 0; i < len; i++) {
-                        byte b = out.get(out.size() - dist);
+                        // take byte from dictionary sliding window
+                        byte b = dictionary[(dictPos - dist + DICT_SIZE) % DICT_SIZE];
                         out.add(b);
+                        dictPut(b); // update dictionary
                     }
                 }
             }
@@ -506,6 +535,9 @@ public class Main {
     }
 
 
+    //
+    // SIZE
+    //
     public static void size(String sourceFile) {
         try {
             FileInputStream f = new FileInputStream(sourceFile);
@@ -518,6 +550,9 @@ public class Main {
 
     }
 
+    //
+    // EQUAL
+    //
     public static boolean equal(String firstFile, String secondFile) {
         try {
             FileInputStream f1 = new FileInputStream(firstFile);
@@ -552,6 +587,9 @@ public class Main {
         }
     }
 
+    //
+    // ABOUT
+    //
     public static void about() {
         //TODO insert information about authors
         System.out.println("251RDB028 Reinis Delvers");
