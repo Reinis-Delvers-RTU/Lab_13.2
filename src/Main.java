@@ -77,6 +77,12 @@ public class Main {
     private static byte[] dictionary = new byte[DICT_SIZE];
     private static int dictPos = 0;
     private static int dictFill = 0;
+    // Binary tree for match finding
+    private static int[] btLeft;
+    private static int[] btRight;
+    private static int btRoot;
+    private static final int BT_MAX_SEARCH_DEPTH = 64;
+
 
     private static void dictPut(byte b) {
         dictionary[dictPos] = b;
@@ -91,6 +97,64 @@ public class Main {
         dictPos = 0;
         dictFill = 0;
     }
+
+    // Inserts position 'pos' into the binary search tree used for match finding.
+    private static void insertPos(byte[] input, int pos) {
+        if (btRoot == -1) {
+            btRoot = pos;
+            return;
+        }
+
+        int n = input.length;
+        int cur = btRoot;
+
+        while (true) {
+            int cmp = compareForTree(input, pos, cur, n);
+
+            if (cmp < 0) {
+                if (btLeft[cur] == -1) {
+                    btLeft[cur] = pos;
+                    return;
+                }
+                cur = btLeft[cur];
+            } else {
+                if (btRight[cur] == -1) {
+                    btRight[cur] = pos;
+                    return;
+                }
+                cur = btRight[cur];
+            }
+        }
+    }
+
+    // Computes how many bytes match starting at pos1 and pos2, limited by MAX_MATCH_LEN and the end of the input.
+    private static int calcMatchLen(byte[] input, int pos1, int pos2, int n) {
+        int maxLen = Math.min(MAX_MATCH_LEN, n - Math.max(pos1, pos2));
+        int len = 0;
+        while (len < maxLen && input[pos1 + len] == input[pos2 + len]) {
+            len++;
+        }
+        return len;
+    }
+
+    // Compares the sequences starting at pos1 and pos2.
+    private static int compareForTree(byte[] input, int pos1, int pos2, int n) {
+        if (pos1 == pos2) return 0;
+
+        int maxLen = Math.min(MAX_MATCH_LEN, n - Math.max(pos1, pos2));
+        int i = 0;
+        while (i < maxLen) {
+            int b1 = input[pos1 + i] & 0xFF;
+            int b2 = input[pos2 + i] & 0xFF;
+            if (b1 != b2) {
+                return b1 - b2;
+            }
+            i++;
+        }
+
+        return pos1 - pos2;
+    }
+
 
     // Reads the entire source file into a byte array.
     private static byte[] readAllBytes(String sourceFile) {
@@ -109,14 +173,21 @@ public class Main {
         }
     }
 
-    // Walks through all input bytes and encodes them as either match or literal
+    // Walks through all input bytes and encodes them as either literals or matches.
     private static void encodeInput(byte[] input) {
         int n = input.length;
         int i = 0;
 
+        btLeft = new int[n];
+        btRight = new int[n];
+        Arrays.fill(btLeft, -1);
+        Arrays.fill(btRight, -1);
+        btRoot = -1;
+
         while (i < n) {
             if (i == n - 1) {
                 encodeLiteral(input[i]);
+                insertPos(input, i);
                 i++;
                 continue;
             }
@@ -127,52 +198,58 @@ public class Main {
 
             if (bestLen >= 2) {
                 encodeMatch(input, i, bestLen, bestDist);
+
+                for (int p = 0; p < bestLen; p++) {
+                    insertPos(input, i + p);
+                }
+
                 i += bestLen;
             } else {
                 encodeLiteral(input[i]);
+                insertPos(input, i);
                 i++;
             }
         }
     }
 
-    // Tries to find the best (longest) match starting at position 'pos' in 'input'.
+
+    // Searches the binary tree for the best (longest) match starting at 'pos'.
     private static int[] findBestMatch(byte[] input, int pos) {
         int n = input.length;
         int bestLen = 0;
         int bestDist = 0;
 
-        if (pos + 1 >= n) {
-            return new int[]{0, 0};
-        }
+        int cur = btRoot;
+        int depth = 0;
 
-        byte b0 = input[pos];
-        byte b1 = input[pos + 1];
+        while (cur != -1 && depth++ < BT_MAX_SEARCH_DEPTH) {
+            int curPos = cur;
+            int dist = pos - curPos;
 
-        int maxBack = Math.min(MAX_DISTANCE, pos);
+            if (dist > 0 && dist <= MAX_DISTANCE) {
+                int matchLen = calcMatchLen(input, pos, curPos, n);
 
-        for (int dist = 1; dist <= maxBack; dist++) {
-            int j = pos - dist;
-            if (j < 0 || j + 1 >= n) continue;
+                if (matchLen >= 2 && matchLen > bestLen) {
+                    bestLen = matchLen;
+                    bestDist = dist;
 
-            if (input[j] != b0 || input[j + 1] != b1) continue;
-
-            int len = 2;
-            while (len < MAX_MATCH_LEN &&
-                pos + len < n &&
-                j + len < n &&
-                input[pos + len] == input[j + len]) {
-                len++;
+                    if (bestLen == MAX_MATCH_LEN) {
+                        break;
+                    }
+                }
             }
 
-            if (len > bestLen) {
-                bestLen = len;
-                bestDist = dist;
-                if (bestLen == MAX_MATCH_LEN) break;
+            int cmp = compareForTree(input, pos, curPos, n);
+            if (cmp < 0) {
+                cur = btLeft[cur];
+            } else {
+                cur = btRight[cur];
             }
         }
 
         return new int[]{bestLen, bestDist};
     }
+
 
     // Encodes a single byte as a literal using rangeEncoder.
     private static void encodeLiteral(byte b) {
