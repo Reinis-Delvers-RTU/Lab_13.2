@@ -54,6 +54,7 @@ public class Main {
                 case "test":
                     comp("test.txt", "t.txt");
                     decomp("t.txt", "tt.txt");
+                    System.out.println(equal("test.txt", "tt.txt")); // Compare original vs decompressed
                     break;
                 case "about":
                     about();
@@ -159,7 +160,7 @@ public class Main {
     // Reads the entire source file into a byte array.
     private static byte[] readAllBytes(String sourceFile) {
         try (FileInputStream in = new FileInputStream(sourceFile);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
 
             byte[] buf = new byte[4096];
             int k;
@@ -253,14 +254,14 @@ public class Main {
 
     // Encodes a single byte as a literal using rangeEncoder.
     private static void encodeLiteral(byte b) {
-        totalSymbols++;
+        System.out.println("value: " + b);
         rangeEncoder(false, 0, 0, b & 0xFF);
         dictPut(b);
     }
 
     // Encodes a match given by (distance, length), starting at 'pos' in 'input'. Calls rangeEncoder as a match and then pushes every matched byte into the dictionary so that future matches can refer to it.
     private static void encodeMatch(byte[] input, int pos, int length, int distance) {
-        totalSymbols++;
+        System.out.println("distance: " + distance + "length: " + length);
         rangeEncoder(true, distance, length, 0);
         for (int k = 0; k < length; k++) {
             dictPut(input[pos + k]);
@@ -270,11 +271,6 @@ public class Main {
     // Writes all bytes collected in outCompressedBytes to the given file.
     private static void writeCompressed(String resultFile) {
         try (FileOutputStream out = new FileOutputStream(resultFile)) {
-            out.write((totalSymbols >>> 24) & 0xFF);
-            out.write((totalSymbols >>> 16) & 0xFF);
-            out.write((totalSymbols >>> 8) & 0xFF);
-            out.write(totalSymbols & 0xFF);
-
             for (byte b : outCompressedBytes) {
                 out.write(b);
             }
@@ -286,13 +282,11 @@ public class Main {
     //
     //COMP
     //
-    private static int totalSymbols = 0;
     public static void comp(String sourceFile, String resultFile) {
-        System.out.print("Compresion started");
+        System.out.println("started compresing");
         resetEncoder();
         resetDictionary();
 
-        totalSymbols = 0;
         byte[] input = readAllBytes(sourceFile);
         if (input == null) return;
 
@@ -303,29 +297,30 @@ public class Main {
     }
 
 
+
     //
     //COMP RANGE ENCODER
     //
-    private static long subRangeStart = 0L;   //Interval start
-    private static long range = 0xFFFFFFFFL;    //set 32-bit max value
+    private static long encoderSubRangeStart = 0L;   //Interval start
+    private static long encoderRange = 0xFFFFFFFFL;    //set 32-bit max value
     private static final int PROBABILITY_INITIALIZER = 1024; //Probability of 0 in scale of 0-2048
 
-    private static int matchProbability = PROBABILITY_INITIALIZER;  //1-bit tree
-    private static int[] literalProbability = new int[512];   //8-bit tree
-    private static int[] lengthProbability = new int[512];    //8-bit tree
-    private static int[] distanceProbability = new int[512];  //8-bit tree
+    private static int encoderMatchProbability = PROBABILITY_INITIALIZER;  //1-bit tree
+    private static int[] encoderLiteralProbability = new int[512];   //8-bit tree
+    private static int[] encoderLengthProbability = new int[512];    //8-bit tree
+    private static int[] encoderDistanceProbability = new int[512];  //8-bit tree
 
     private static ArrayList<Byte> outCompressedBytes = new ArrayList<>();
 
     //Resets global values for encoder
     public static void resetEncoder() {
         outCompressedBytes.clear();
-        subRangeStart = 0L;
-        range = 0xFFFFFFFFL;
-        matchProbability = PROBABILITY_INITIALIZER;
-        Arrays.fill(literalProbability, PROBABILITY_INITIALIZER);   //Sets PROBABILITY_INITIALIZER as value to all array positions
-        Arrays.fill(lengthProbability, PROBABILITY_INITIALIZER);    //Sets PROBABILITY_INITIALIZER as value to all array positions
-        Arrays.fill(distanceProbability, PROBABILITY_INITIALIZER);  //Sets PROBABILITY_INITIALIZER as value to all array positions
+        encoderSubRangeStart = 0L;
+        encoderRange = 0xFFFFFFFFL;
+        encoderMatchProbability = PROBABILITY_INITIALIZER;
+        Arrays.fill(encoderLiteralProbability, PROBABILITY_INITIALIZER);   //Sets PROBABILITY_INITIALIZER as value to all array positions
+        Arrays.fill(encoderLengthProbability, PROBABILITY_INITIALIZER);    //Sets PROBABILITY_INITIALIZER as value to all array positions
+        Arrays.fill(encoderDistanceProbability, PROBABILITY_INITIALIZER);  //Sets PROBABILITY_INITIALIZER as value to all array positions
     }
 
     //Main range encoder
@@ -344,22 +339,22 @@ public class Main {
 
     //Match or literal flag encoder
     public static void flagEncoder(int bit) {
-        int probability = matchProbability;
-        long subRange = (range >>> 11) * probability;
+        int probability = encoderMatchProbability;
+        long subRange = (encoderRange >>> 11) * probability;
         if (bit == 0) {
-            range = subRange;
-            matchProbability += (2048 - probability) >>> 5;
+            encoderRange = subRange;
+            encoderMatchProbability += (2048 - probability) >>> 5;
         } else {
-            subRangeStart += subRange;
-            range -= subRange;
-            matchProbability -= probability >>> 5;
+            encoderSubRangeStart += subRange;
+            encoderRange -= subRange;
+            encoderMatchProbability -= probability >>> 5;
         }
 
         //Return stable bytes
-        while ((range < 0x01000000)) {
-            outCompressedBytes.add((byte)(subRangeStart >> 24));
-            range <<= 8;
-            subRangeStart <<= 8;
+        while ((encoderRange < 0x01000000)) {
+            outCompressedBytes.add((byte)(encoderSubRangeStart >> 24));
+            encoderRange <<= 8;
+            encoderSubRangeStart <<= 8;
         }
     }
 
@@ -368,17 +363,17 @@ public class Main {
         int bitTreeIndex = 1; //bit tree position index root start is 1
         for (int i = 7; i >= 0; i--) {
             int bit = (value >>> i) & 1;
-            int probability = literalProbability[bitTreeIndex];
-            long subRange = (range >>> 11) * probability;
+            int probability = encoderLiteralProbability[bitTreeIndex];
+            long subRange = (encoderRange >>> 11) * probability;
 
             if (bit == 0) {
-                range = subRange;
-                literalProbability[bitTreeIndex] += (2048 - probability) >>> 5;
+                encoderRange = subRange;
+                encoderLiteralProbability[bitTreeIndex] += (2048 - probability) >>> 5;
                 bitTreeIndex <<= 1;   //go left int bit tree
             } else {
-                subRangeStart += subRange;
-                range -= subRange;
-                literalProbability[bitTreeIndex] -= probability >>> 5;
+                encoderSubRangeStart += subRange;
+                encoderRange -= subRange;
+                encoderLiteralProbability[bitTreeIndex] -= probability >>> 5;
                 bitTreeIndex = (bitTreeIndex << 1) | 1; //go right int bit tree
             }
             normalizeEncoder();
@@ -391,17 +386,17 @@ public class Main {
         int bitTreeIndex = 1;   //bit tree position index root start is 1
         for (int i = 7; i >= 0; i--) {
             int bit = (len >>> i) & 1;
-            int probability= lengthProbability[bitTreeIndex];
-            long subRange = (range >>> 11) * probability;
+            int probability= encoderLengthProbability[bitTreeIndex];
+            long subRange = (encoderRange >>> 11) * probability;
 
             if (bit == 0) {
-                range = subRange;
-                lengthProbability[bitTreeIndex] += (2048 - probability) >>> 5;
+                encoderRange = subRange;
+                encoderLengthProbability[bitTreeIndex] += (2048 - probability) >>> 5;
                 bitTreeIndex <<= 1;
             } else {
-                subRangeStart += subRange;
-                range -= subRange;
-                lengthProbability[bitTreeIndex] -= probability >>> 5;
+                encoderSubRangeStart += subRange;
+                encoderRange -= subRange;
+                encoderLengthProbability[bitTreeIndex] -= probability >>> 5;
                 bitTreeIndex = (bitTreeIndex << 1) | 1;
             }
             normalizeEncoder();
@@ -410,21 +405,21 @@ public class Main {
 
     //Match distance value encoder
     public static void distanceEncoder(int distance) {
-        int dist = distance - 1;
+        int dist = distance - 1; // minimum distance =1
         int bitTreeIndex = 1;    // bit tree position index root start is 1
         for (int i = 7; i >= 0; i--) {
             int bit = (dist >>> i) & 1;
-            int probability= distanceProbability[bitTreeIndex];
-            long subRange = (range >>> 11) * probability;
+            int probability= encoderDistanceProbability[bitTreeIndex];
+            long subRange = (encoderRange >>> 11) * probability;
 
             if (bit == 0) {
-                range = subRange;
-                distanceProbability[bitTreeIndex] += (2048 - probability) >>> 5;
+                encoderRange = subRange;
+                encoderDistanceProbability[bitTreeIndex] += (2048 - probability) >>> 5;
                 bitTreeIndex <<= 1;
             } else {
-                subRangeStart += subRange;
-                range -= subRange;
-                distanceProbability[bitTreeIndex] -= probability >>> 5;
+                encoderSubRangeStart += subRange;
+                encoderRange -= subRange;
+                encoderDistanceProbability[bitTreeIndex] -= probability >>> 5;
                 bitTreeIndex = (bitTreeIndex << 1) | 1;
             }
             normalizeEncoder();
@@ -433,47 +428,46 @@ public class Main {
 
     public static void normalizeEncoder() {
         //Return stable bytes
-        while ((range < 0x01000000)) {
-            outCompressedBytes.add((byte)(subRangeStart >> 24));
-            range <<= 8;
-            subRangeStart <<= 8;
+        while ((encoderRange < 0x01000000)) {
+            outCompressedBytes.add((byte)(encoderSubRangeStart >> 24));
+            encoderRange <<= 8;
+            encoderSubRangeStart <<= 8;
         }
     }
 
     //After encoding everything taking the last bit value
     public static void flush() {
         for (int i = 0; i < 4; i++) {
-            outCompressedBytes.add((byte)(subRangeStart >> 24));
-            subRangeStart <<= 8;
+            outCompressedBytes.add((byte)(encoderSubRangeStart >> 24));
+            encoderSubRangeStart <<= 8;
         }
     }
 
     //
     //DECOMP RANGE DECODER
     //
+
+    private static long decoderSubRangeStart = 0L; // current code
+    private static long decoderRange = 0xFFFFFFFFL;
+
+    private static int decoderMatchProbability = PROBABILITY_INITIALIZER;
+    private static int[] decoderLiteralProbability = new int[512];
+    private static int[] decoderLengthProbability = new int[512];
+    private static int[] decoderDistanceProbability = new int[512];
+    private static byte[] inCompressedBytes;
+    private static int inputPos = 0;
     public static void decomp(String sourceFile, String resultFile) {
         try {
             // read compressed data
             byte[] input = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(sourceFile));
 
-            // reset encoder state (probabilities and range variables)
             resetEncoder();
             resetDictionary();
 
-            if (input == null || input.length < 4) {
-                System.out.println("Compressed file too short or missing header.");
-                return;
-            }
-
-            int symbolCount = ((input[0] & 0xFF) << 24) |
-                    ((input[1] & 0xFF) << 16) |
-                    ((input[2] & 0xFF) << 8) |
-                    (input[3] & 0xFF);
-            int inPosStart = 4;
 
             // Decoder class for range decoding
             class Decoder {
-                int inPos = inPosStart;
+                int inPos = 0;
                 long code = 0;
 
                 Decoder() {
@@ -484,30 +478,30 @@ public class Main {
                 }
 
                 void normalize() {
-                    while (range < 0x01000000) {
+                    while (decoderRange < 0x01000000) {
                         if (inPos < input.length) {
                             code = ((code << 8) | (input[inPos++] & 0xFF)) & 0xFFFFFFFFL;
                         } else {
                             code = (code << 8) & 0xFFFFFFFFL;
                         }
-                        range <<= 8;
-                        subRangeStart <<= 8;
+                        decoderRange <<= 8;
+                        decoderSubRangeStart <<= 8;
                     }
                 }
 
                 int decodeFlag() {
-                    int p = matchProbability;
-                    long bound = (range >>> 11) * p;
+                    int p = decoderMatchProbability;
+                    long bound = (decoderRange >>> 11) * p;
                     int bit;
 
-                    if ((code - subRangeStart) < bound) {
-                        range = bound;
-                        matchProbability += (2048 - p) >>> 5;
+                    if ((code - decoderSubRangeStart) < bound) {
+                        decoderRange = bound;
+                        decoderMatchProbability += (2048 - p) >>> 5;
                         bit = 0;
                     } else {
-                        subRangeStart += bound;
-                        range -= bound;
-                        matchProbability -= p >>> 5;
+                        decoderSubRangeStart += bound;
+                        decoderRange -= bound;
+                        decoderMatchProbability -= p >>> 5;
                         bit = 1;
                     }
 
@@ -517,16 +511,16 @@ public class Main {
 
                 int decodeBit(int[] prob, int idx) {
                     int p = prob[idx];
-                    long bound = (range >>> 11) * p;
+                    long bound = (decoderRange >>> 11) * p;
                     int bit;
 
-                    if ((code - subRangeStart) < bound) {
-                        range = bound;
+                    if ((code - decoderSubRangeStart) < bound) {
+                        decoderRange = bound;
                         prob[idx] += (2048 - p) >>> 5;
                         bit = 0;
                     } else {
-                        subRangeStart += bound;
-                        range -= bound;
+                        decoderSubRangeStart += bound;
+                        decoderRange -= bound;
                         prob[idx] -= p >>> 5;
                         bit = 1;
                     }
@@ -539,7 +533,7 @@ public class Main {
                     int idx = 1;
                     int value = 0;
                     for (int i = 7; i >= 0; i--) {
-                        int b = decodeBit(literalProbability, idx);
+                        int b = decodeBit(decoderLiteralProbability, idx);
                         value |= b << i;
                         idx = (idx << 1) | b;
                     }
@@ -550,7 +544,7 @@ public class Main {
                     int idx = 1;
                     int value = 0;
                     for (int i = 7; i >= 0; i--) {
-                        int b = decodeBit(lengthProbability, idx);
+                        int b = decodeBit(decoderLengthProbability, idx);
                         value |= b << i;
                         idx = (idx << 1) | b;
                     }
@@ -561,7 +555,7 @@ public class Main {
                     int idx = 1;
                     int value = 0;
                     for (int i = 7; i >= 0; i--) {
-                        int b = decodeBit(distanceProbability, idx);
+                        int b = decodeBit(decoderDistanceProbability, idx);
                         value |= b << i;
                         idx = (idx << 1) | b;
                     }
@@ -574,7 +568,7 @@ public class Main {
 
             // --- MAIN LOOP ---
             ArrayList<Byte> out = new ArrayList<>();
-            for (int s = 0; s < symbolCount; s++) {
+            for (int s = 0; s < out.size(); s++) {
                 int isMatch = d.decodeFlag();
 
                 if (isMatch == 0) {
