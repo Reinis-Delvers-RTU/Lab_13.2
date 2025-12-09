@@ -18,11 +18,16 @@ public class Main {
         Scanner sc = new Scanner(System.in);
         String choiseStr;
         String sourceFile, resultFile, firstFile, secondFile;
-
+        boolean hasrun = false;
         loop: while (true) {
-
-            System.out.println("Enter command: ");
-            choiseStr = sc.next();
+            if (hasrun == false) {
+                choiseStr = "test";
+                hasrun = true;
+            }
+            else {
+                System.out.println("Enter command: ");
+                choiseStr = sc.next();
+            }
 
             switch (choiseStr) {
                 case "comp":
@@ -52,9 +57,12 @@ public class Main {
                     System.out.println(equal(firstFile, secondFile));
                     break;
                 case "test":
-                    comp("File5.html", "t.txt");
+                    comp("File2.html", "t.txt");
                     decomp("t.txt", "tt.txt");
-                    System.out.println(equal("File.html", "tt.txt")); // Compare original vs decompressed
+                    System.out.println(equal("File2.html", "tt.txt")); // Compare original vs decompressed
+                    size("File1.html");
+                    size("t.txt");
+                    size("tt.txt");
                     break;
                 case "about":
                     about();
@@ -63,7 +71,6 @@ public class Main {
                     break loop;
             }
         }
-
         sc.close();
     }
 
@@ -350,6 +357,7 @@ public class Main {
             encoderMatchProbability -= probability >>> 5;
         }
 
+        //Return stable bytes
         normalizeEncoder();
     }
 
