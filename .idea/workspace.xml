@@ -5,15 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="d652a1a4-199c-48e0-b891-fcfc25753654" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/File1.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/File2.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/File3.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/File4.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/File5.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/File5.html" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Main.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/t.txt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test.txt" beforeDir="false" afterPath="$PROJECT_DIR$/test.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/t.bin" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/t.txt" beforeDir="false" afterPath="$PROJECT_DIR$/t.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/tt.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -85,6 +81,9 @@
       <workItem from="1764266171888" duration="366000" />
       <workItem from="1764266567449" duration="13633000" />
       <workItem from="1764420577594" duration="57089000" />
+      <workItem from="1765298935045" duration="357000" />
+      <workItem from="1765369424585" duration="9518000" />
+      <workItem from="1765414855297" duration="8214000" />
     </task>
     <servers />
   </component>

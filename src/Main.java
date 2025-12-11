@@ -6,8 +6,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Scanner;
 
 public class Main {
@@ -18,43 +18,58 @@ public class Main {
         Scanner sc = new Scanner(System.in);
         String choiseStr;
         String sourceFile, resultFile, firstFile, secondFile;
-
+        boolean hasrun = false;
         loop: while (true) {
-
-            System.out.println("Enter command: ");
-            choiseStr = sc.next();
+            if (hasrun == false) {
+                choiseStr = "test";
+                hasrun = true;
+            }
+            else {
+                System.out.println("Enter command: ");
+                choiseStr = sc.next();
+            }
 
             switch (choiseStr) {
                 case "comp":
-                    System.out.print("source file name: ");
+                    System.out.println("source file name: ");
                     sourceFile = sc.next();
-                    System.out.print("archive name: ");
+                    System.out.println("archive name: ");
                     resultFile = sc.next();
                     comp(sourceFile, resultFile);
                     break;
                 case "decomp":
-                    System.out.print("archive name: ");
+                    System.out.println("archive name: ");
                     sourceFile = sc.next();
-                    System.out.print("file name: ");
+                    System.out.println("file name: ");
                     resultFile = sc.next();
                     decomp(sourceFile, resultFile);
                     break;
                 case "size":
-                    System.out.print("file name: ");
+                    System.out.println("file name: ");
                     sourceFile = sc.next();
                     size(sourceFile);
                     break;
                 case "equal":
-                    System.out.print("first file name: ");
+                    System.out.println("first file name: ");
                     firstFile = sc.next();
-                    System.out.print("second file name: ");
+                    System.out.println("second file name: ");
                     secondFile = sc.next();
                     System.out.println(equal(firstFile, secondFile));
                     break;
                 case "test":
-                    comp("File5.html", "t.txt");
-                    decomp("t.txt", "tt.txt");
-                    System.out.println(equal("File.html", "tt.txt")); // Compare original vs decompressed
+                    System.out.println("---------------------------------------");
+                    for (int i = 1; i < 5; i++) {
+                        System.out.println("File: " + i);
+                        comp("File" + i + ".html", "t.txt");
+                        decomp("t.txt", "tt.txt");
+                        System.out.print("Are files equal: ");
+                        System.out.println(equal("File" + i + ".html", "tt.txt")); // Compare original vs decompressed
+                        int originalFileSize = size("File" + i + ".html");
+                        int compFileSize = size("t.txt");
+                        size("tt.txt");
+                        System.out.println("ratio: " + (float) originalFileSize / compFileSize );
+                        System.out.println("---------------------------------------");
+                    }
                     break;
                 case "about":
                     about();
@@ -63,17 +78,15 @@ public class Main {
                     break loop;
             }
         }
-
         sc.close();
     }
 
     //
     //COMP MATCH FINDER
     //
-    private static final int DICT_SIZE = 1024;
-
-    private static final int MAX_DISTANCE = 255;
-    private static final int MAX_MATCH_LEN = 255;
+    private static final int DICT_SIZE = 65536;
+    private static final int MAX_DISTANCE = 65535;
+    private static final int MAX_MATCH_LEN = 511;
     // Encoder dictionary
     private static byte[] dictionary = new byte[DICT_SIZE];
     private static int dictPos = 0;
@@ -175,7 +188,7 @@ public class Main {
     }
 
     // Walks through all input bytes and encodes them as either literals or matches.
-    private static void encodeInput(byte[] input) {
+    private static void compInput(byte[] input) {
         int n = input.length;
         int i = 0;
 
@@ -187,7 +200,7 @@ public class Main {
 
         while (i < n) {
             if (i == n - 1) {
-                encodeLiteral(input[i]);
+                literalComp(input[i]);
                 insertPos(input, i);
                 i++;
                 continue;
@@ -197,8 +210,8 @@ public class Main {
             int bestLen = match[0];
             int bestDist = match[1];
 
-            if (bestLen >= 2) {
-                encodeMatch(input, i, bestLen, bestDist);
+            if (bestLen >= 3) {
+                matchComp(input, i, bestLen, bestDist);
 
                 for (int p = 0; p < bestLen; p++) {
                     insertPos(input, i + p);
@@ -206,16 +219,18 @@ public class Main {
 
                 i += bestLen;
             } else {
-                encodeLiteral(input[i]);
+                literalComp(input[i]);
                 insertPos(input, i);
                 i++;
             }
         }
     }
 
+    private static ArrayList<int[]> allMatches = new ArrayList<>();
 
     // Searches the binary tree for the best (longest) match starting at 'pos'.
     private static int[] findBestMatch(byte[] input, int pos) {
+        allMatches.clear();
         int n = input.length;
         int bestLen = 0;
         int bestDist = 0;
@@ -230,13 +245,9 @@ public class Main {
             if (dist > 0 && dist <= MAX_DISTANCE) {
                 int matchLen = calcMatchLen(input, pos, curPos, n);
 
-                if (matchLen >= 2 && matchLen > bestLen) {
-                    bestLen = matchLen;
-                    bestDist = dist;
+                if (matchLen >= 2) {
 
-                    if (bestLen == MAX_MATCH_LEN) {
-                        break;
-                    }
+                    allMatches.add(new int[] {matchLen, dist});
                 }
             }
 
@@ -248,21 +259,133 @@ public class Main {
             }
         }
 
+        int lowestByteCount = Integer.MAX_VALUE;
+
+        for (int[] i : allMatches) {
+            int tempByteCount = 1;
+            if (i[0] < 32) {
+                tempByteCount += 6;
+            } else {
+                tempByteCount += 10;
+            }
+
+            if (i[1] < 128) {
+                tempByteCount += 9;
+            } else if (i[1] < 1024) {
+                tempByteCount += 12;
+            } else if (i[1] < 8192) {
+                tempByteCount += 15;
+            } else {
+                tempByteCount += 18;
+            }
+
+            if (tempByteCount< (9 * i[0])) {
+                if (tempByteCount < lowestByteCount) {
+                    bestLen = i[0];
+                    bestDist = i[1];
+                    lowestByteCount = tempByteCount;
+                }
+
+            }
+        }
+
         return new int[]{bestLen, bestDist};
     }
 
 
+    //
+    //COMP
+    //
+    private static ArrayList<Byte> outCompBytes = new ArrayList<>();
+
+    public static void comp(String sourceFile, String resultFile) {
+        System.out.println("started compresing");
+        resetComp();
+        resetDictionary();
+
+        byte[] input = readAllBytes(sourceFile);
+        if (input == null) return;
+
+        compInput(input);
+        flushBits();
+
+        writeCompressed(resultFile);
+        System.out.println("Compresion complete");
+    }
+
+    //Resets global values for encoder
+    public static void resetComp() {
+        outCompBytes.clear();
+    }
+
     // Encodes a single byte as a literal using rangeEncoder.
-    private static void encodeLiteral(byte b) {
-        System.out.println("value: " + b);
-        rangeEncoder(false, 0, 0, b & 0xFF);
-        dictPut(b);
+    private static void literalComp(int b) {
+//        System.out.println("value: " + b);
+        writeByBits((byte) 0, 1);
+        writeByBits((byte) b, 8);
+        dictPut((byte) b);
+    }
+
+    private static int bitCache = 0;
+    private static int bitCount = 0;
+
+    private static void writeByBits(byte b, int bitNumber) {
+        for (int i = bitNumber - 1; i >= 0; i--) {
+            int bit = (b >> i) & 1;
+            bitCache = (bitCache << 1) | bit;
+            bitCount++;
+
+            if (bitCount == 8) {
+                outCompBytes.add((byte) bitCache);
+                bitCache = 0;
+                bitCount = 0;
+            }
+        }
+    }
+
+    private static void  flushBits() {
+        if (bitCount > 0) {
+            bitCache <<= (8 - bitCount);
+            outCompBytes.add((byte) bitCache);
+            bitCache = 0;
+            bitCount = 0;
+        }
     }
 
     // Encodes a match given by (distance, length), starting at 'pos' in 'input'. Calls rangeEncoder as a match and then pushes every matched byte into the dictionary so that future matches can refer to it.
-    private static void encodeMatch(byte[] input, int pos, int length, int distance) {
-        System.out.println("length: " + length + "   distance: " + distance );
-        rangeEncoder(true, distance, length, 0);
+    private static void matchComp(byte[] input, int pos, int length, int distance) {
+//        System.out.println("length: " + length + "   distance: " + distance );
+        writeByBits((byte) 1, 1);
+        if (length < 32) {
+            writeByBits((byte) 0, 1);
+            writeByBits((byte) (length & 0x1F), 5);
+        } else {
+            writeByBits((byte) 1, 1);
+            writeByBits((byte) (length & 0xFF), 8);
+            writeByBits((byte) ((length >>> 8) & 0x01), 1);
+        }
+
+        if (distance < 128) {
+            writeByBits((byte) 0, 1);
+            writeByBits((byte) 0, 1);
+            writeByBits((byte) (distance & 0x7F), 7);
+        } else if (distance < 1024) {
+            writeByBits((byte) 1, 1);
+            writeByBits((byte) 0, 1);
+            writeByBits((byte) (distance & 0xFF), 8);
+            writeByBits((byte) ((distance >>> 8) & 0x03), 2);
+        } else if (distance < 8192) {
+            writeByBits((byte) 0, 1);
+            writeByBits((byte) 1, 1);
+            writeByBits((byte) (distance & 0xFF), 8);
+            writeByBits((byte) ((distance >>> 8) & 0x1F), 5);
+        } else {
+            writeByBits((byte) 1, 1);
+            writeByBits((byte) 1, 1);
+            writeByBits((byte) (distance & 0xFF), 8);
+            writeByBits((byte) ((distance >>> 8) & 0xFF), 8);
+        }
+
         for (int k = 0; k < length; k++) {
             dictPut(input[pos + k]);
         }
@@ -271,7 +394,7 @@ public class Main {
     // Writes all bytes collected in outCompressedBytes to the given file.
     private static void writeCompressed(String resultFile) {
         try (FileOutputStream out = new FileOutputStream(resultFile)) {
-            for (byte b : outCompressedBytes) {
+            for (byte b : outCompBytes) {
                 out.write(b);
             }
         } catch (IOException ex) {
@@ -279,345 +402,68 @@ public class Main {
         }
     }
 
+
     //
-    //COMP
+    //DECOMP
     //
-    public static void comp(String sourceFile, String resultFile) {
-        System.out.println("started compresing");
-        resetEncoder();
+    public static void decomp(String sourceFile, String resultFile) {
+        System.out.println("started Decompresing");
+        resetDecomp();
         resetDictionary();
 
         byte[] input = readAllBytes(sourceFile);
         if (input == null) return;
 
-        encodeInput(input);
-        flush();
+        decompInput(input);
+
         writeCompressed(resultFile);
-        System.out.println("Compresion complete");
+        System.out.println("Decompresion complete");
     }
 
+    public static void decompInput(byte[] input) {
 
-
-    //
-    //COMP RANGE ENCODER
-    //
-    private static long encoderSubRangeStart = 0L;   //Interval start
-    private static long encoderRange = 0xFFFFFFFFL;    //set 32-bit max value
-    private static final int PROBABILITY_INITIALIZER = 1024; //Probability of 0 in scale of 0-2048
-
-    private static int encoderMatchProbability = PROBABILITY_INITIALIZER;  //1-bit tree
-    private static int[] encoderLiteralProbability = new int[512];   //8-bit tree
-    private static int[] encoderLengthProbability = new int[512];    //8-bit tree
-    private static int[] encoderDistanceProbability = new int[512];  //8-bit tree
-
-    private static ArrayList<Byte> outCompressedBytes = new ArrayList<>();
-
-    //Resets global values for encoder
-    public static void resetEncoder() {
-        outCompressedBytes.clear();
-        encoderSubRangeStart = 0L;
-        encoderRange = 0xFFFFFFFFL;
-        encoderMatchProbability = PROBABILITY_INITIALIZER;
-        Arrays.fill(encoderLiteralProbability, PROBABILITY_INITIALIZER);   //Sets PROBABILITY_INITIALIZER as value to all array positions
-        Arrays.fill(encoderLengthProbability, PROBABILITY_INITIALIZER);    //Sets PROBABILITY_INITIALIZER as value to all array positions
-        Arrays.fill(encoderDistanceProbability, PROBABILITY_INITIALIZER);  //Sets PROBABILITY_INITIALIZER as value to all array positions
     }
 
-    //Main range encoder
-    public static void rangeEncoder(boolean isMatch, int distance, int length, int value) {
-        //Match ot literal bit encoding
-        flagEncoder(isMatch ? 1 : 0); //literal = 0, match = 1
+    //Resets global values for decomp
+    public static void resetDecomp() {
 
-        //Encode depending on match or literal
-        if (isMatch) {
-            lengthEncoder(length);
-            distanceEncoder(distance);
-        } else {
-            literalEncoder(value);
-        }
     }
 
-    //Match or literal flag encoder
-    public static void flagEncoder(int bit) {
-        int probability = encoderMatchProbability;
-        long subRange = (encoderRange >>> 11) * probability;
-        if (bit == 0) {
-            encoderRange = subRange;
-            encoderMatchProbability += (2048 - probability) >>> 5;
-        } else {
-            encoderSubRangeStart += subRange;
-            encoderRange -= subRange;
-            encoderMatchProbability -= probability >>> 5;
-        }
+    //Match or literal flag decomp
+    public static void flagDecomp(int bit) {
 
-        normalizeEncoder();
     }
 
-    //Literal value encoder
-    public static void literalEncoder(int value) {
-        int bitTreeIndex = 1; //bit tree position index root start is 1
-        for (int i = 7; i >= 0; i--) {
-            int bit = (value >>> i) & 1;
-            int probability = encoderLiteralProbability[bitTreeIndex];
-            long subRange = (encoderRange >>> 11) * probability;
+    //Literal value decomp
+    public static void literalDecomp(int value) {
 
-            if (bit == 0) {
-                encoderRange = subRange;
-                encoderLiteralProbability[bitTreeIndex] += (2048 - probability) >>> 5;
-                bitTreeIndex <<= 1;   //go left int bit tree
-            } else {
-                encoderSubRangeStart += subRange;
-                encoderRange -= subRange;
-                encoderLiteralProbability[bitTreeIndex] -= probability >>> 5;
-                bitTreeIndex = (bitTreeIndex << 1) | 1; //go right int bit tree
-            }
-            normalizeEncoder();
-        }
     }
 
-    //Match length value encoder
-    public static void lengthEncoder(int length) {
-        int len = length - 2;   //min match length = 2 subRangeStarter numbers
-        int bitTreeIndex = 1;   //bit tree position index root start is 1
-        for (int i = 7; i >= 0; i--) {
-            int bit = (len >>> i) & 1;
-            int probability= encoderLengthProbability[bitTreeIndex];
-            long subRange = (encoderRange >>> 11) * probability;
+    //Match length value decomp
+    public static void lengthDecomp(int length) {
 
-            if (bit == 0) {
-                encoderRange = subRange;
-                encoderLengthProbability[bitTreeIndex] += (2048 - probability) >>> 5;
-                bitTreeIndex <<= 1;
-            } else {
-                encoderSubRangeStart += subRange;
-                encoderRange -= subRange;
-                encoderLengthProbability[bitTreeIndex] -= probability >>> 5;
-                bitTreeIndex = (bitTreeIndex << 1) | 1;
-            }
-            normalizeEncoder();
-        }
     }
 
-    //Match distance value encoder
-    public static void distanceEncoder(int distance) {
-        int dist = distance - 1; // minimum distance =1
-        int bitTreeIndex = 1;    // bit tree position index root start is 1
-        for (int i = 7; i >= 0; i--) {
-            int bit = (dist >>> i) & 1;
-            int probability= encoderDistanceProbability[bitTreeIndex];
-            long subRange = (encoderRange >>> 11) * probability;
+    //Match distance value decomp
+    public static void distanceDecomp(int distance) {
 
-            if (bit == 0) {
-                encoderRange = subRange;
-                encoderDistanceProbability[bitTreeIndex] += (2048 - probability) >>> 5;
-                bitTreeIndex <<= 1;
-            } else {
-                encoderSubRangeStart += subRange;
-                encoderRange -= subRange;
-                encoderDistanceProbability[bitTreeIndex] -= probability >>> 5;
-                bitTreeIndex = (bitTreeIndex << 1) | 1;
-            }
-            normalizeEncoder();
-        }
-    }
-
-    public static void normalizeEncoder() {
-        //Return stable bytes
-        while ((encoderRange < 0x01000000)) {
-            outCompressedBytes.add((byte)(encoderSubRangeStart >> 24));
-            encoderRange <<= 8;
-            encoderSubRangeStart <<= 8;
-        }
-    }
-
-    //After encoding everything taking the last bit value
-    public static void flush() {
-        for (int i = 0; i < 4; i++) {
-            outCompressedBytes.add((byte)(encoderSubRangeStart >> 24));
-            encoderSubRangeStart <<= 8;
-        }
-    }
-
-    //
-    //DECOMP RANGE DECODER
-    //
-    private static long decoderSubRangeStart = 0L; // current code
-    private static long decoderRange = 0xFFFFFFFFL;
-    private static int inputPosition = 0;
-
-    private static int decoderMatchProbability = PROBABILITY_INITIALIZER;
-    private static int[] decoderLiteralProbability = new int[512];
-    private static int[] decoderLengthProbability = new int[512];
-    private static int[] decoderDistanceProbability = new int[512];
-
-    private static byte[] input;
-
-    public static void resetDecoder() {
-        decoderSubRangeStart = 0L;
-        decoderRange = 0xFFFFFFFFL;
-        inputPosition = 0;
-
-        decoderMatchProbability = PROBABILITY_INITIALIZER;
-        Arrays.fill(decoderLiteralProbability, PROBABILITY_INITIALIZER);   //Sets PROBABILITY_INITIALIZER as value to all array positions
-        Arrays.fill(decoderLengthProbability, PROBABILITY_INITIALIZER);    //Sets PROBABILITY_INITIALIZER as value to all array positions
-        Arrays.fill(decoderDistanceProbability, PROBABILITY_INITIALIZER);  //Sets PROBABILITY_INITIALIZER as value to all array positions
-    }
-
-    public static void decomp(String sourceFile, String resultFile) {
-        System.out.println("started decompressing");
-
-        resetDecoder();
-        resetDictionary();
-
-        input = readAllBytes(sourceFile);
-        if (input == null) return;
-
-        for (int i = 0; i < 4; i++) {
-            decoderSubRangeStart = (decoderSubRangeStart << 8) | (input[inputPosition++] & 0xFF);
-        }
-
-        rangeDecoder();
-
-        System.out.println("finished decompressing");
-    }
-
-    public static void rangeDecoder() {
-        while (inputPosition < input.length) {
-            int isMatch = flagDecoder();
-            if ( isMatch == 1){
-                int lenght = lengthDecoder();
-                int distance = distanceDecoder();
-                System.out.println("lenght: " + lenght + "   distance: " + distance);
-            } else {
-                int literal = literalDecoder();
-                System.out.println("value: " + literal);
-            }
-        }
-    }
-
-
-    //Match or literal flag decoder
-    public static int flagDecoder() {
-        int probability = decoderMatchProbability;
-        long subRange = (decoderRange >>> 11) * probability;
-
-        int bit;
-
-        if (decoderSubRangeStart < subRange) {
-            bit = 0;
-            decoderRange = subRange;
-            decoderMatchProbability += (2048 - probability) >>> 5;
-        } else {
-            bit = 1;
-            decoderSubRangeStart -= subRange;
-            decoderRange -= subRange;
-            decoderMatchProbability -= probability >>> 5;
-        }
-        normalizeDecoder();
-        return bit;
-    }
-
-    //Literal value decoder
-    public static int literalDecoder() {
-        int bitTreeIndex = 1; //bit tree position index root start is 1
-        int literal = 0;
-
-        for (int i = 7; i >= 0; i--) {
-            int probability = decoderLiteralProbability[bitTreeIndex];
-            long subRange = (decoderRange >>> 11) * probability;
-
-            int bit;
-            if (decoderSubRangeStart < subRange) {
-                bit = 0;
-                decoderRange = subRange;
-                decoderLiteralProbability[bitTreeIndex] += (2048 - probability) >>> 5;
-                bitTreeIndex <<= 1;   //go left int bit tree
-            } else {
-                bit = 1;
-                decoderSubRangeStart -= subRange;
-                decoderRange -= subRange;
-                decoderLiteralProbability[bitTreeIndex] -= probability >>> 5;
-                bitTreeIndex = (bitTreeIndex << 1) | 1; //go right int bit tree
-            }
-            literal = (literal << 1) | bit;
-            normalizeDecoder();
-        }
-        return literal;
-    }
-
-    //Match length value decoder
-    public static int lengthDecoder() {
-        int bitTreeIndex = 1;   //bit tree position index root start is 1
-        int lenght = 0;
-
-        for (int i = 7; i >= 0; i--) {
-            int probability= decoderLengthProbability[bitTreeIndex];
-            long subRange = (decoderRange >>> 11) * probability;
-            int bit;
-            if (decoderSubRangeStart < subRange) {
-                bit = 0;
-                decoderRange = subRange;
-                decoderLengthProbability[bitTreeIndex] += (2048 - probability) >>> 5;
-                bitTreeIndex <<= 1;
-            } else {
-                bit = 1;
-                decoderSubRangeStart -= subRange;
-                decoderRange -= subRange;
-                decoderLengthProbability[bitTreeIndex] -= probability >>> 5;
-                bitTreeIndex = (bitTreeIndex << 1) | 1;
-            }
-            lenght = (lenght << 1) | bit;
-            normalizeDecoder();
-        }
-        return lenght + 2;
-    }
-
-    //Match distance value decoder
-    public static int distanceDecoder() {
-        int bitTreeIndex = 1;    // bit tree position index root start is 1
-        int distance = 0;
-        for (int i = 7; i >= 0; i--) {
-            int probability= decoderDistanceProbability[bitTreeIndex];
-            long subRange = (decoderRange >>> 11) * probability;
-            int bit;
-            if (decoderSubRangeStart < subRange) {
-                bit = 0;
-                decoderRange = subRange;
-                decoderDistanceProbability[bitTreeIndex] += (2048 - probability) >>> 5;
-                bitTreeIndex <<= 1;
-            } else {
-                bit = 1;
-                decoderSubRangeStart -= subRange;
-                decoderRange -= subRange;
-                decoderDistanceProbability[bitTreeIndex] -= probability >>> 5;
-                bitTreeIndex = (bitTreeIndex << 1) | 1;
-            }
-            distance = (distance << 1) | bit;
-            normalizeDecoder();
-        }
-        return distance + 1;
-    }
-
-    private static void normalizeDecoder() {
-        while ((decoderRange < 0x01000000)) {
-            decoderRange <<= 8;
-            decoderSubRangeStart = (decoderSubRangeStart << 8) | (input[inputPosition++] & 0xFF);
-        }
     }
 
     //
     // SIZE
     //
-    public static void size(String sourceFile) {
+    public static int size(String sourceFile) {
+        int size = 0;
         try {
             FileInputStream f = new FileInputStream(sourceFile);
             System.out.println("size: " + f.available());
+            size = f.available();
             f.close();
         }
         catch (IOException ex) {
             System.out.println(ex.getMessage());
         }
-
+        return size;
     }
 
     //
