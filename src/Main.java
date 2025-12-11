@@ -1,6 +1,8 @@
-//251RDB028 Reinis Delvers
-//111RDB111 Aleksis Kaļetovs
-//111RDB111 Raimonds Polis
+//DAŽI KOMENTĀRI IR NETĪŠĀM IZDZĒSTI, type shit
+
+// 251RDB028 Reinis Delvers
+// 111RDB111 Aleksis Kaļetovs
+// 251RDB213 Raimonds Polis
 
 import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
@@ -11,20 +13,17 @@ import java.util.ArrayList;
 import java.util.Scanner;
 
 public class Main {
-    //
-    //MAIN
-    //
+
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         String choiseStr;
         String sourceFile, resultFile, firstFile, secondFile;
         boolean hasrun = false;
         loop: while (true) {
-            if (hasrun == false) {
+            if (!hasrun) {
                 choiseStr = "test";
                 hasrun = true;
-            }
-            else {
+            } else {
                 System.out.println("Enter command: ");
                 choiseStr = sc.next();
             }
@@ -63,11 +62,15 @@ public class Main {
                         comp("File" + i + ".html", "t.txt");
                         decomp("t.txt", "tt.txt");
                         System.out.print("Are files equal: ");
-                        System.out.println(equal("File" + i + ".html", "tt.txt")); // Compare original vs decompressed
+                        System.out.println(equal("File" + i + ".html", "tt.txt"));
                         int originalFileSize = size("File" + i + ".html");
                         int compFileSize = size("t.txt");
                         size("tt.txt");
-                        System.out.println("ratio: " + (float) originalFileSize / compFileSize );
+                        if (compFileSize != 0) {
+                            System.out.println("ratio: " + (float) originalFileSize / compFileSize);
+                        } else {
+                            System.out.println("ratio: (compressed size is 0)");
+                        }
                         System.out.println("---------------------------------------");
                     }
                     break;
@@ -76,34 +79,29 @@ public class Main {
                     break;
                 case "exit":
                     break loop;
+                default:
+                    System.out.println("Unknown command. Available: comp, decomp, size, equal, test, about, exit");
             }
         }
         sc.close();
     }
 
-    //
-    //COMP MATCH FINDER
-    //
     private static final int DICT_SIZE = 65536;
     private static final int MAX_DISTANCE = 65535;
     private static final int MAX_MATCH_LEN = 511;
-    // Encoder dictionary
+
     private static byte[] dictionary = new byte[DICT_SIZE];
     private static int dictPos = 0;
     private static int dictFill = 0;
-    // Binary tree for match finding
     private static int[] btLeft;
     private static int[] btRight;
     private static int btRoot;
     private static final int BT_MAX_SEARCH_DEPTH = 64;
 
-
     private static void dictPut(byte b) {
         dictionary[dictPos] = b;
         dictPos = (dictPos + 1) % DICT_SIZE;
-        if (dictFill < DICT_SIZE) {
-            dictFill++;
-        }
+        if (dictFill < DICT_SIZE) dictFill++;
     }
 
     private static void resetDictionary() {
@@ -112,8 +110,8 @@ public class Main {
         dictFill = 0;
     }
 
-    // Inserts position 'pos' into the binary search tree used for match finding.
     private static void insertPos(byte[] input, int pos) {
+        if (pos < 0 || pos >= input.length) return;
         if (btRoot == -1) {
             btRoot = pos;
             return;
@@ -141,8 +139,8 @@ public class Main {
         }
     }
 
-    // Computes how many bytes match starting at pos1 and pos2, limited by MAX_MATCH_LEN and the end of the input.
     private static int calcMatchLen(byte[] input, int pos1, int pos2, int n) {
+        if (pos1 < 0 || pos2 < 0 || pos1 >= n || pos2 >= n) return 0;
         int maxLen = Math.min(MAX_MATCH_LEN, n - Math.max(pos1, pos2));
         int len = 0;
         while (len < maxLen && input[pos1 + len] == input[pos2 + len]) {
@@ -151,26 +149,19 @@ public class Main {
         return len;
     }
 
-    // Compares the sequences starting at pos1 and pos2.
     private static int compareForTree(byte[] input, int pos1, int pos2, int n) {
         if (pos1 == pos2) return 0;
-
         int maxLen = Math.min(MAX_MATCH_LEN, n - Math.max(pos1, pos2));
         int i = 0;
         while (i < maxLen) {
             int b1 = input[pos1 + i] & 0xFF;
             int b2 = input[pos2 + i] & 0xFF;
-            if (b1 != b2) {
-                return b1 - b2;
-            }
+            if (b1 != b2) return b1 - b2;
             i++;
         }
-
         return pos1 - pos2;
     }
 
-
-    // Reads the entire source file into a byte array.
     private static byte[] readAllBytes(String sourceFile) {
         try (FileInputStream in = new FileInputStream(sourceFile);
              ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
@@ -187,7 +178,6 @@ public class Main {
         }
     }
 
-    // Walks through all input bytes and encodes them as either literals or matches.
     private static void compInput(byte[] input) {
         int n = input.length;
         int i = 0;
@@ -200,7 +190,7 @@ public class Main {
 
         while (i < n) {
             if (i == n - 1) {
-                literalComp(input[i]);
+                literalComp(input[i] & 0xFF);
                 insertPos(input, i);
                 i++;
                 continue;
@@ -212,14 +202,12 @@ public class Main {
 
             if (bestLen >= 3) {
                 matchComp(input, i, bestLen, bestDist);
-
                 for (int p = 0; p < bestLen; p++) {
                     insertPos(input, i + p);
                 }
-
                 i += bestLen;
             } else {
-                literalComp(input[i]);
+                literalComp(input[i] & 0xFF);
                 insertPos(input, i);
                 i++;
             }
@@ -228,7 +216,6 @@ public class Main {
 
     private static ArrayList<int[]> allMatches = new ArrayList<>();
 
-    // Searches the binary tree for the best (longest) match starting at 'pos'.
     private static int[] findBestMatch(byte[] input, int pos) {
         allMatches.clear();
         int n = input.length;
@@ -246,60 +233,52 @@ public class Main {
                 int matchLen = calcMatchLen(input, pos, curPos, n);
 
                 if (matchLen >= 2) {
-
-                    allMatches.add(new int[] {matchLen, dist});
+                    allMatches.add(new int[]{matchLen, dist});
                 }
             }
 
             int cmp = compareForTree(input, pos, curPos, n);
-            if (cmp < 0) {
-                cur = btLeft[cur];
-            } else {
-                cur = btRight[cur];
-            }
+            if (cmp < 0) cur = btLeft[cur];
+            else cur = btRight[cur];
         }
 
         int lowestByteCount = Integer.MAX_VALUE;
 
-        for (int[] i : allMatches) {
-            int tempByteCount = 1;
-            if (i[0] < 32) {
+        for (int[] m : allMatches) {
+            int matchLen = m[0];
+            int dist = m[1];
+
+            int tempByteCount = 1; // base
+            if (matchLen < 32)
                 tempByteCount += 6;
-            } else {
+            else
                 tempByteCount += 10;
-            }
 
-            if (i[1] < 128) {
+            if (dist < 128)
                 tempByteCount += 9;
-            } else if (i[1] < 1024) {
+            else if (dist < 1024)
                 tempByteCount += 12;
-            } else if (i[1] < 8192) {
+            else if (dist < 8192)
                 tempByteCount += 15;
-            } else {
+            else
                 tempByteCount += 18;
-            }
 
-            if (tempByteCount< (9 * i[0])) {
+            // Only choose match if encoding it is beneficial vs literals
+            if (tempByteCount < (9 * matchLen)) {
                 if (tempByteCount < lowestByteCount) {
-                    bestLen = i[0];
-                    bestDist = i[1];
+                    bestLen = matchLen;
+                    bestDist = dist;
                     lowestByteCount = tempByteCount;
                 }
-
             }
         }
-
         return new int[]{bestLen, bestDist};
     }
 
-
-    //
-    //COMP
-    //
     private static ArrayList<Byte> outCompBytes = new ArrayList<>();
 
     public static void comp(String sourceFile, String resultFile) {
-        System.out.println("started compresing");
+        System.out.println("Started compression");
         resetComp();
         resetDictionary();
 
@@ -310,80 +289,76 @@ public class Main {
         flushBits();
 
         writeCompressed(resultFile);
-        System.out.println("Compresion complete");
+        System.out.println("Compression complete");
     }
 
-    //Resets global values for encoder
     public static void resetComp() {
         outCompBytes.clear();
     }
 
-    // Encodes a single byte as a literal using rangeEncoder.
     private static void literalComp(int b) {
-//        System.out.println("value: " + b);
-        writeByBits((byte) 0, 1);
-        writeByBits((byte) b, 8);
+        writeByBits(0, 1); // flag 0 = literal
+        writeByBits(b & 0xFF, 8);
         dictPut((byte) b);
     }
 
     private static int bitCache = 0;
     private static int bitCount = 0;
 
-    private static void writeByBits(byte b, int bitNumber) {
+    private static void writeByBits(int b, int bitNumber) {
         for (int i = bitNumber - 1; i >= 0; i--) {
             int bit = (b >> i) & 1;
             bitCache = (bitCache << 1) | bit;
             bitCount++;
 
             if (bitCount == 8) {
-                outCompBytes.add((byte) bitCache);
+                outCompBytes.add((byte) (bitCache & 0xFF));
                 bitCache = 0;
                 bitCount = 0;
             }
         }
     }
 
-    private static void  flushBits() {
+    private static void flushBits() {
         if (bitCount > 0) {
             bitCache <<= (8 - bitCount);
-            outCompBytes.add((byte) bitCache);
+            outCompBytes.add((byte) (bitCache & 0xFF));
             bitCache = 0;
             bitCount = 0;
         }
     }
 
-    // Encodes a match given by (distance, length), starting at 'pos' in 'input'. Calls rangeEncoder as a match and then pushes every matched byte into the dictionary so that future matches can refer to it.
     private static void matchComp(byte[] input, int pos, int length, int distance) {
-//        System.out.println("length: " + length + "   distance: " + distance );
-        writeByBits((byte) 1, 1);
+        writeByBits(1, 1); // flag 1 = match
+
         if (length < 32) {
-            writeByBits((byte) 0, 1);
-            writeByBits((byte) (length & 0x1F), 5);
+            writeByBits(0, 1);
+            writeByBits(length & 0x1F, 5);
         } else {
-            writeByBits((byte) 1, 1);
-            writeByBits((byte) (length & 0xFF), 8);
-            writeByBits((byte) ((length >>> 8) & 0x01), 1);
+            writeByBits(1, 1);
+            writeByBits(length & 0xFF, 8);
+            writeByBits((length >>> 8) & 0x01, 1);
         }
 
         if (distance < 128) {
-            writeByBits((byte) 0, 1);
-            writeByBits((byte) 0, 1);
-            writeByBits((byte) (distance & 0x7F), 7);
+            writeByBits(0, 1);
+            writeByBits(0, 1);
+            writeByBits(distance & 0x7F, 7);
         } else if (distance < 1024) {
-            writeByBits((byte) 1, 1);
-            writeByBits((byte) 0, 1);
-            writeByBits((byte) (distance & 0xFF), 8);
-            writeByBits((byte) ((distance >>> 8) & 0x03), 2);
+            writeByBits(1, 1);
+            writeByBits(0, 1);
+            writeByBits(distance & 0xFF, 8);
+            writeByBits((distance >>> 8) & 0x03, 2);
         } else if (distance < 8192) {
-            writeByBits((byte) 0, 1);
-            writeByBits((byte) 1, 1);
-            writeByBits((byte) (distance & 0xFF), 8);
-            writeByBits((byte) ((distance >>> 8) & 0x1F), 5);
+            writeByBits(0, 1);
+            writeByBits(1, 1);
+            writeByBits(distance & 0xFF, 8);
+            writeByBits((distance >>> 8) & 0x1F, 5);
         } else {
-            writeByBits((byte) 1, 1);
-            writeByBits((byte) 1, 1);
-            writeByBits((byte) (distance & 0xFF), 8);
-            writeByBits((byte) ((distance >>> 8) & 0xFF), 8);
+            writeByBits(1, 1);
+            writeByBits(1, 1);
+            writeByBits(distance & 0xFF, 8);
+            writeByBits((distance >>> 8) & 0xFF, 8);
         }
 
         for (int k = 0; k < length; k++) {
@@ -391,23 +366,24 @@ public class Main {
         }
     }
 
-    // Writes all bytes collected in outCompressedBytes to the given file.
     private static void writeCompressed(String resultFile) {
         try (FileOutputStream out = new FileOutputStream(resultFile)) {
-            for (byte b : outCompBytes) {
-                out.write(b);
-            }
+            for (byte b : outCompBytes) out.write(b & 0xFF);
         } catch (IOException ex) {
-            System.out.println("Error writing compressed file: " + ex.getMessage());
+            System.out.println("Error writing file: " + ex.getMessage());
         }
     }
 
+    // =============================================================
+    // ======================= DECOMPRESSION ========================
+    // =============================================================
 
-    //
-    //DECOMP
-    //
+    private static int inBitPos = 0;
+    private static byte[] inBytes;
+    private static int lastDistance = 0;
+
     public static void decomp(String sourceFile, String resultFile) {
-        System.out.println("started Decompresing");
+        System.out.println("Started decompression");
         resetDecomp();
         resetDictionary();
 
@@ -416,42 +392,117 @@ public class Main {
 
         decompInput(input);
 
-        writeCompressed(resultFile);
-        System.out.println("Decompresion complete");
+        writeCompressed(resultFile); // outCompBytes now holds decompressed bytes
+        System.out.println("Decompression complete");
+    }
+
+    public static void resetDecomp() {
+        outCompBytes.clear();
+        lastDistance = 0;
+        inBitPos = 0;
+    }
+
+    private static int readBit() {
+        int bytePos = inBitPos >> 3;
+        if (inBytes == null || bytePos >= inBytes.length) return -1;
+        int bitPos = 7 - (inBitPos & 7);
+        inBitPos++;
+        return (inBytes[bytePos] >> bitPos) & 1;
+    }
+
+    private static int readBits(int n) {
+        int v = 0;
+        for (int i = 0; i < n; i++) {
+            int b = readBit();
+            if (b < 0) return -1; // signal EOF
+            v = (v << 1) | b;
+        }
+        return v;
     }
 
     public static void decompInput(byte[] input) {
+        inBytes = input;
+        inBitPos = 0;
+        outCompBytes.clear();
 
+        while ((inBitPos >> 3) < input.length) {
+
+            int flag = readBit();
+            if (flag < 0) break;
+
+            if (flag == 0) {
+                int b = readBits(8);
+                if (b < 0) break;
+                literalDecomp(b);
+
+            } else {
+                int lenHeader = readBit();
+                if (lenHeader < 0) break;
+                int length;
+
+                if (lenHeader == 0) {
+                    int v = readBits(5);
+                    if (v < 0) break;
+                    length = v;
+                } else {
+                    int v1 = readBits(8);
+                    int v2 = readBit();
+                    if (v1 < 0 || v2 < 0) break;
+                    length = v1 | (v2 << 8);
+                }
+
+                int c1 = readBit();
+                int c2 = readBit();
+                if (c1 < 0 || c2 < 0) break;
+                int distance = 0;
+
+                if (c1 == 0 && c2 == 0) {
+                    int v = readBits(7);
+                    if (v < 0) break;
+                    distance = v;
+                } else if (c1 == 1 && c2 == 0) {
+                    int low = readBits(8);
+                    int high2 = readBits(2);
+                    if (low < 0 || high2 < 0) break;
+                    distance = low | (high2 << 8);
+                } else if (c1 == 0 && c2 == 1) {
+                    int low = readBits(8);
+                    int high5 = readBits(5);
+                    if (low < 0 || high5 < 0) break;
+                    distance = low | (high5 << 8);
+                } else {
+                    int low = readBits(8);
+                    int high = readBits(8);
+                    if (low < 0 || high < 0) break;
+                    distance = low | (high << 8);
+                }
+
+                distanceDecomp(distance);
+                lengthDecomp(length);
+            }
+        }
     }
 
-    //Resets global values for decomp
-    public static void resetDecomp() {
-
-    }
-
-    //Match or literal flag decomp
-    public static void flagDecomp(int bit) {
-
-    }
-
-    //Literal value decomp
     public static void literalDecomp(int value) {
-
+        byte b = (byte) value;
+        outCompBytes.add(b);
+        dictPut(b);
     }
 
-    //Match length value decomp
-    public static void lengthDecomp(int length) {
-
-    }
-
-    //Match distance value decomp
     public static void distanceDecomp(int distance) {
-
+        lastDistance = distance;
     }
 
-    //
-    // SIZE
-    //
+    public static void lengthDecomp(int length) {
+        if (length <= 0) return;
+        for (int i = 0; i < length; i++) {
+            int src = (dictPos - lastDistance + DICT_SIZE) % DICT_SIZE;
+            byte b = dictionary[src];
+            outCompBytes.add(b);
+            dictPut(b);
+        }
+    }
+
     public static int size(String sourceFile) {
         int size = 0;
         try {
@@ -459,16 +510,12 @@ public class Main {
             System.out.println("size: " + f.available());
             size = f.available();
             f.close();
-        }
-        catch (IOException ex) {
+        } catch (IOException ex) {
             System.out.println(ex.getMessage());
         }
         return size;
     }
 
-    //
-    // EQUAL
-    //
     public static boolean equal(String firstFile, String secondFile) {
         try {
             FileInputStream f1 = new FileInputStream(firstFile);
@@ -484,33 +531,28 @@ public class Main {
                     f2.close();
                     return false;
                 }
-                for (int i=0; i<k1; i++) {
-                    if (buf1[i] != buf2[i]) {
-                        f1.close();
-                        f2.close();
-                        return false;
+                if (k1 > 0) {
+                    for (int i = 0; i < k1; i++) {
+                        if (buf1[i] != buf2[i]) {
+                            f1.close();
+                            f2.close();
+                            return false;
+                        }
                     }
-
                 }
             } while (!(k1 == -1 && k2 == -1));
             f1.close();
             f2.close();
             return true;
-        }
-        catch (IOException ex) {
+        } catch (IOException ex) {
             System.out.println(ex.getMessage());
             return false;
         }
     }
 
-    //
-    // ABOUT
-    //
     public static void about() {
-        //TODO insert information about authors
         System.out.println("251RDB028 Reinis Delvers");
         System.out.println("111RDB111 Aleksis Kaļetovs");
-        System.out.println("111RDB111 Raimonds Polis");
-
+        System.out.println("251RDB213 Raimonds Polis");
     }
 }
