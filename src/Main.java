@@ -1,6 +1,6 @@
-// 251RDB028 Reinis Delvers
-// 251RDB060 Aleksis Kaļetovs
-// 251RDB213 Raimonds Polis
+// 251RDB028 Reinis Delvers 15.grupa
+// 251RDB060 Aleksis Kaļetovs 15.grupa
+// 251RDB213 Raimonds Polis 3.grupa
 
 
 //imports
@@ -604,9 +604,9 @@ public class Main {
     // ABOUT
     //
     public static void about() {
-        System.out.println("251RDB028 Reinis Delvers");
-        System.out.println("251RDB060 Aleksis Kaļetovs");
-        System.out.println("251RDB213 Raimonds Polis");
+        // 251RDB028 Reinis Delvers 15.grupa
+        // 251RDB060 Aleksis Kaļetovs 15.grupa
+        // 251RDB213 Raimonds Polis 3.grupa
     }
 }
 
