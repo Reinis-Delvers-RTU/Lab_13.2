@@ -98,18 +98,23 @@ public class Main {
     //
     // main comp method
     public static void comp(String sourceFile, String resultFile) {
-        System.out.println("Started compression");
-        resetComp();
-        resetDictionary();
+        try {
+            System.out.println("Started compression");
+            resetComp();
+            resetDictionary();
 
-        byte[] input = readAllBytes(sourceFile);
-        if (input == null) return;
+            byte[] input = readAllBytes(sourceFile);
+            if (input == null) return;
 
-        compInput(input);
-        flushBits();
+            writeByBits(input.length, 32);
+            compInput(input);
+            flushBits();
 
-        writeToFile(resultFile);
-        System.out.println("Compression complete");
+            writeToFile(resultFile);
+            System.out.println("Compression complete");
+        } catch (OutOfMemoryError e) {
+            System.out.println("File is too big while compressing, out of memory");
+        }
     }
     
     // Resets comp variables
@@ -342,10 +347,10 @@ public class Main {
             int curPos = cur;
             int dist = pos - curPos;
 
-            if (dist > 0 && dist <= MAX_DISTANCE) {
+            if (dist > 1 && dist <= dictFill) {
                 int matchLen = calcMatchLen(input, pos, curPos, n);
 
-                if (matchLen >= 2) {
+                if (matchLen > 1) {
                     allMatches.add(new int[]{matchLen, dist});
                 }
             }
@@ -396,17 +401,30 @@ public class Main {
     //
     // main decomp method
     public static void decomp(String sourceFile, String resultFile) {
-        System.out.println("Started decompression");
-        resetDecomp();
-        resetDictionary();
+        try {
+            System.out.println("Started decompression");
+            resetDecomp();
+            resetDictionary();
 
-        byte[] input = readAllBytes(sourceFile);
-        if (input == null) return;
+            byte[] input = readAllBytes(sourceFile);
+            if (input == null) return;
 
-        decompInput(input);
+            inBytes = input;
+            inBitPos = 0;
 
-        writeToFile(resultFile); // outBytes now holds decompressed bytes
-        System.out.println("Decompression complete");
+            int originalSize = readBits(32);
+            if (originalSize < 0) {
+                throw new RuntimeException("Invalid file compressed file size");
+            }
+            decompInput(originalSize);
+
+            writeToFile(resultFile); // outBytes now holds decompressed bytes
+            System.out.println("Decompression complete");
+        } catch (OutOfMemoryError e) {
+            System.out.println("File is too big while decompresing, out of memory");
+        } catch (RuntimeException e) {
+            System.out.println(e.getMessage());
+        }
     }
 
     // Resets decomp variables
@@ -437,12 +455,10 @@ public class Main {
     }
     
     // decompreses the file
-    private static void decompInput(byte[] input) {
-        inBytes = input;
-        inBitPos = 0;
-        outBytes.clear();
+    private static void decompInput(int originalSize) {
 
-        while ((inBitPos >> 3) < input.length) {
+        outBytes.clear();
+        while (outBytes.size() < originalSize) {
 
             int flag = readBit();
             if (flag < 0) break;
@@ -492,6 +508,14 @@ public class Main {
                     int high = readBits(8);
                     if (low < 0 || high < 0) break;
                     distance = low | (high << 8);
+                }
+
+                if (distance < 2 || distance > dictFill) {
+                    throw new RuntimeException("Decomp got invalid distance: " + distance);
+                }
+
+                if (length < 2 || length > MAX_MATCH_LEN) {
+                    throw new RuntimeException("Decomp got invalid length: " + length);
                 }
 
                 distanceDecomp(distance);
