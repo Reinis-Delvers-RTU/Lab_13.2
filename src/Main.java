@@ -347,7 +347,7 @@ public class Main {
             int curPos = cur;
             int dist = pos - curPos;
 
-            if (dist > 1 && dist <= dictFill) {
+            if (dist > 1 && dist <= MAX_DISTANCE) {
                 int matchLen = calcMatchLen(input, pos, curPos, n);
 
                 if (matchLen > 1) {
